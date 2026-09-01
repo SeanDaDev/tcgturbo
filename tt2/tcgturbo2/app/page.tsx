@@ -21,12 +21,27 @@ import { GameState, CardDef, CardInstance, GameMode } from '@/lib/tcg/types';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 
+import { PackOpenerModal } from '@/components/tcg/PackOpenerModal';
+import { TradeModal } from '@/components/tcg/TradeModal';
+import {
+  PlayerCollection,
+  loadPlayerCollection,
+  openBoosterPack,
+  addVictoryPackReward
+} from '@/lib/tcg/collectionEngine';
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'battle' | 'deckbuilder' | 'almanac' | 'lore'>('battle');
   const [gameTitle, setGameTitle] = useState<string>(GAME_TITLES[0]);
   const [gameMode, setGameMode] = useState<GameMode>('couch_2p');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
+
+  const [collection, setCollection] = useState<PlayerCollection>(() =>
+    loadPlayerCollection('player_1')
+  );
+  const [isPackModalOpen, setIsPackModalOpen] = useState<boolean>(false);
+  const [isTradeModalOpen, setIsTradeModalOpen] = useState<boolean>(false);
 
   const [customP1Deck, setCustomP1Deck] = useState<string[] | undefined>(undefined);
   const [customP2Deck, setCustomP2Deck] = useState<string[] | undefined>(undefined);
@@ -48,6 +63,13 @@ export default function Home() {
     },
     [gameMode, customP1Deck, customP2Deck]
   );
+
+  // Victory Reward listener
+  useEffect(() => {
+    if (gameState.winner === 1) {
+      setCollection(current => addVictoryPackReward(current));
+    }
+  }, [gameState.winner]);
 
   // AI Turn Execution in Solo Mode
   useEffect(() => {
@@ -119,6 +141,9 @@ export default function Home() {
         isMuted={isMuted}
         setIsMuted={setIsMuted}
         onNewMatch={() => handleStartNewDuel()}
+        unopenedPacks={collection.unopenedPacks}
+        onOpenPackModal={() => setIsPackModalOpen(true)}
+        onOpenTradeModal={() => setIsTradeModalOpen(true)}
       />
 
       {/* Main View Container */}
@@ -166,6 +191,26 @@ export default function Home() {
       <CardInspectorModal
         card={inspectedCard}
         onClose={() => setInspectedCard(null)}
+      />
+
+      {/* Booster Pack Opener Modal */}
+      <PackOpenerModal
+        isOpen={isPackModalOpen}
+        unopenedPacks={collection.unopenedPacks}
+        onOpenPack={() => {
+          const { updatedCollection, unlockedCards } = openBoosterPack(collection);
+          setCollection(updatedCollection);
+          return unlockedCards;
+        }}
+        onClose={() => setIsPackModalOpen(false)}
+      />
+
+      {/* Free Card Gifting & Trading Modal */}
+      <TradeModal
+        isOpen={isTradeModalOpen}
+        collection={collection}
+        onUpdateCollection={updated => setCollection(updated)}
+        onClose={() => setIsTradeModalOpen(false)}
       />
 
       {/* Victory / Defeat Game Over Modal */}

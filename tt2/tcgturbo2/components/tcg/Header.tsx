@@ -16,6 +16,9 @@ interface HeaderProps {
   isMuted: boolean;
   setIsMuted: (muted: boolean) => void;
   onNewMatch: () => void;
+  unopenedPacks?: number;
+  onOpenPackModal?: () => void;
+  onOpenTradeModal?: () => void;
 }
 
 export function Header({
@@ -27,7 +30,10 @@ export function Header({
   setGameMode,
   isMuted,
   setIsMuted,
-  onNewMatch
+  onNewMatch,
+  unopenedPacks = 0,
+  onOpenPackModal,
+  onOpenTradeModal
 }: HeaderProps) {
   const toggleSound = () => {
     const unmuted = soundEngine.toggleMute();
@@ -44,27 +50,27 @@ export function Header({
   };
 
   return (
-    <header className="app-header flex items-center justify-between px-4 md:px-8 py-2 sticky top-0 z-50 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 shadow-2xl">
+    <header className="app-header flex flex-wrap items-center justify-between px-4 md:px-8 py-2.5 sticky top-0 z-50 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/80 shadow-2xl gap-3">
       {/* Brand */}
       <div className="brand-section flex items-center gap-3">
         <div className="game-logo-gem" />
         <div className="brand-title-wrap">
-          <h1 className="brand-title text-lg md:text-xl font-black tracking-wider uppercase bg-gradient-to-r from-amber-200 via-sky-300 to-indigo-300 bg-clip-text text-transparent font-serif">
+          <h1 className="brand-title text-xl md:text-2xl font-black tracking-wider uppercase bg-gradient-to-r from-amber-200 via-sky-300 to-indigo-300 bg-clip-text text-transparent font-serif">
             {gameTitle}
           </h1>
-          <span className="brand-subtitle text-[10px] text-slate-400 font-mono tracking-widest uppercase">
+          <span className="brand-subtitle text-[11px] text-slate-400 font-mono tracking-widest uppercase font-semibold">
             Tactical Conduit & Ascension TCG
           </span>
         </div>
       </div>
 
       {/* Nav Tabs */}
-      <nav className="nav-tabs flex items-center bg-slate-900/60 p-1 rounded-xl border border-slate-800 gap-1" aria-label="Main Navigation">
+      <nav className="nav-tabs flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1.5" aria-label="Main Navigation">
         <button
-          className={`nav-tab-btn px-3 md:px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-1.5 transition-all ${
+          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
             activeTab === 'battle'
-              ? 'bg-gradient-to-r from-blue-600/40 to-indigo-600/40 text-sky-200 border border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
           }`}
           onClick={() => {
             setActiveTab('battle');
@@ -76,10 +82,10 @@ export function Header({
         </button>
 
         <button
-          className={`nav-tab-btn px-3 md:px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-1.5 transition-all ${
+          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
             activeTab === 'deckbuilder'
-              ? 'bg-gradient-to-r from-blue-600/40 to-indigo-600/40 text-sky-200 border border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
           }`}
           onClick={() => {
             setActiveTab('deckbuilder');
@@ -91,10 +97,10 @@ export function Header({
         </button>
 
         <button
-          className={`nav-tab-btn px-3 md:px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-1.5 transition-all ${
+          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
             activeTab === 'almanac'
-              ? 'bg-gradient-to-r from-blue-600/40 to-indigo-600/40 text-sky-200 border border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
           }`}
           onClick={() => {
             setActiveTab('almanac');
@@ -106,10 +112,10 @@ export function Header({
         </button>
 
         <button
-          className={`nav-tab-btn px-3 md:px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold flex items-center gap-1.5 transition-all ${
+          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
             activeTab === 'lore'
-              ? 'bg-gradient-to-r from-blue-600/40 to-indigo-600/40 text-sky-200 border border-sky-400/40 shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
           }`}
           onClick={() => {
             setActiveTab('lore');
@@ -121,8 +127,33 @@ export function Header({
         </button>
       </nav>
 
-      {/* Utilities */}
+      {/* Action Utilities & Progression Features */}
       <div className="header-actions flex items-center gap-2 md:gap-3">
+        {onOpenPackModal && (
+          <button
+            type="button"
+            onClick={onOpenPackModal}
+            className="btn bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-lg hover:scale-105 transition-transform"
+            title="Open Booster Packs"
+          >
+            <span>🎁 Packs</span>
+            <span className="bg-slate-950 text-amber-300 px-1.5 py-0.2 rounded-md font-extrabold text-[10px]">
+              {unopenedPacks}
+            </span>
+          </button>
+        )}
+
+        {onOpenTradeModal && (
+          <button
+            type="button"
+            onClick={onOpenTradeModal}
+            className="btn bg-purple-950/80 border border-purple-500/50 text-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono flex items-center gap-1.5 hover:bg-purple-900/80 transition-colors"
+            title="Free Card Gifting & Trading ($0.00)"
+          >
+            <span>🔄 Trade</span>
+          </button>
+        )}
+
         {/* Title Switcher */}
         <select
           value={gameTitle}
@@ -132,7 +163,7 @@ export function Header({
               document.title = `${e.target.value} | Modular Web TCG`;
             }
           }}
-          className="title-select bg-slate-900 text-slate-300 border border-slate-700/80 rounded-lg px-2.5 py-1 text-xs font-mono outline-none hover:border-sky-500/60 transition-colors hidden lg:block"
+          className="title-select bg-slate-900 text-slate-300 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs font-mono outline-none hover:border-sky-500/60 transition-colors hidden xl:block"
           title="Switch Game Title Theme"
         >
           {GAME_TITLES.map((t, idx) => (
@@ -153,7 +184,7 @@ export function Header({
           }`}
           title={isMuted ? 'Unmute Sound (M)' : 'Mute Sound (M)'}
         >
-          {!isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          {!isMuted ? <Volume2 className="w-4.5 h-4.5" /> : <VolumeX className="w-4.5 h-4.5" />}
         </button>
 
         {/* Fullscreen Button */}
@@ -163,7 +194,7 @@ export function Header({
           className="action-icon-btn p-2 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 transition-colors hidden sm:flex"
           title="Toggle Fullscreen (F)"
         >
-          <Maximize className="w-4 h-4" />
+          <Maximize className="w-4.5 h-4.5" />
         </button>
       </div>
     </header>

@@ -293,6 +293,24 @@ export function RulesCodex() {
           </table>
         </div>
       </section>
+
+      {/* SECTION 7: US LEGAL COMPLIANCE & FAIR PLAY CHARTER */}
+      <section className="codex-section bg-slate-900/80 border border-slate-800 rounded-2xl p-6 md:p-8 flex flex-col gap-4 shadow-lg backdrop-blur-md mb-8">
+        <h3 className="codex-heading text-lg md:text-xl font-bold font-serif text-emerald-400 flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          7. US Legal Compliance & Free Fair Play Charter
+        </h3>
+        <div className="bg-slate-950/80 border-l-4 border-emerald-400 p-4 rounded-r-xl text-xs md:text-sm text-slate-300 leading-relaxed flex flex-col gap-3">
+          <p>
+            <strong>100% Free-to-Play Entertainment Software:</strong> TCG Turbo is operated strictly as a non-gambling, free-to-play video game. Under United States federal and state laws (including UIGEA, FTC Gaming Guidelines, and COPPA):
+          </p>
+          <ul className="list-disc pl-5 space-y-1.5 text-slate-400">
+            <li><strong>Zero Monetary Value ($0.00 USD):</strong> All cards, booster packs, stardust, and avatars are virtual game items with zero real-world monetary value and cannot be exchanged or redeemed for fiat currency.</li>
+            <li><strong>No Real-Money Purchases / No Loot Box Microtransactions:</strong> Booster packs cannot be bought with real money; they are unlocked exclusively by winning duels or reaching gameplay milestones.</li>
+            <li><strong>Free Peer-to-Peer Trading:</strong> Card gifting and trading between players is 100% free with no financial transactions or secondary market valuations permitted.</li>
+          </ul>
+        </div>
+      </section>
     </div>
   );
 }

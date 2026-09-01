@@ -40,8 +40,13 @@ export default function Home() {
   const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
 
   const [collection, setCollection] = useState<PlayerCollection>(() =>
-    loadPlayerCollection('player_1')
+    getInitialCollection('player_1')
   );
+
+  // Load client-side persistent collection after mount to prevent SSR hydration mismatch
+  useEffect(() => {
+    setCollection(loadPlayerCollection('player_1'));
+  }, []);
   const [isPackModalOpen, setIsPackModalOpen] = useState<boolean>(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState<boolean>(false);
   const [isShopModalOpen, setIsShopModalOpen] = useState<boolean>(false);

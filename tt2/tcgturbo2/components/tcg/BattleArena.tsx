@@ -676,8 +676,8 @@ export function BattleArena({
                   : 'text-slate-400'
               }`}
             >
-              <span className="text-slate-500 mr-1">[{log.time}]</span>
-              {log.text}
+              <span className="text-slate-500 mr-1" suppressHydrationWarning>[{log.time}]</span>
+              <span suppressHydrationWarning>{log.text}</span>
             </div>
           ))}
         </div>

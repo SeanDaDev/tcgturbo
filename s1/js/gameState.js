@@ -102,6 +102,9 @@ class GameState {
   startTurn(playSound = true) {
     const active = this.getActivePlayer();
     
+    // Phase 1: Draw / Surge Step
+    this.phase = 'draw';
+
     // Increase Max Aether (up to 10)
     if (this.round > 1 || active.id === 2) {
       if (active.maxAether < 10) {
@@ -126,14 +129,52 @@ class GameState {
 
     // Draw 1 card at start of turn
     this.drawCard(active.id === 1, playSound);
-    this.phase = 'main';
-    this.log(`${active.name}'s turn starts (Aether: ${active.aether}/${active.maxAether})`, 'log-turn');
+    this.log(`--- Round ${this.round}: ${active.name}'s Turn ---`, 'log-turn');
+    this.log(`[Phase 1: Draw & Surge] Aether replenished to ${active.aether}/${active.maxAether}.`, 'log-turn');
 
     if (playSound && window.soundEngine) {
       window.soundEngine.playTurnChime();
     }
 
-    this.notify();
+    // Auto-advance Draw phase into Main Phase
+    this.phase = 'main';
+    this.log(`[Phase 2: Main Phase] Play cards, ascend units, or surge hero powers.`, 'log-summon');
+
+    this.notify({ type: 'phase_change', phase: 'main', player: active });
+  }
+
+  setPhase(newPhase) {
+    if (this.winner || this.isPrivacyCurtainActive) return;
+    if (this.phase === newPhase) return;
+
+    const validPhases = ['main', 'battle', 'end'];
+    if (!validPhases.includes(newPhase)) return;
+
+    this.phase = newPhase;
+    const active = this.getActivePlayer();
+
+    if (newPhase === 'main') {
+      this.log(`[Phase 2: Main Phase] ${active.name} is preparing tactics.`, 'log-summon');
+      if (window.soundEngine) window.soundEngine.playHover();
+    } else if (newPhase === 'battle') {
+      this.log(`[Phase 3: Battle Phase] ${active.name} engages combat readiness!`, 'log-attack');
+      if (window.soundEngine) window.soundEngine.playAttack();
+    } else if (newPhase === 'end') {
+      this.endTurn();
+      return;
+    }
+
+    this.notify({ type: 'phase_change', phase: newPhase, player: active });
+  }
+
+  advancePhase() {
+    if (this.winner || this.isPrivacyCurtainActive) return;
+
+    if (this.phase === 'draw' || this.phase === 'main') {
+      this.setPhase('battle');
+    } else if (this.phase === 'battle') {
+      this.endTurn();
+    }
   }
 
   drawCard(forPlayer1, playSound = true) {
@@ -142,6 +183,7 @@ class GameState {
       // Fatigue damage
       player.vanguard.hp -= 2;
       this.log(`${player.name} takes 2 Fatigue damage!`, 'log-attack');
+      this.notify({ type: 'combat_hit', targetType: 'vanguard', targetId: player.id, damage: 2 });
       if (player.vanguard.hp <= 0) this.checkWinCondition();
       return null;
     }
@@ -164,7 +206,12 @@ class GameState {
   /**
    * Play a card from hand
    */
-  playCard(instanceId, targetLaneIndex = null) {
+  playCard(instanceId, targetLaneIndex = null, spellTarget = null) {
+    if (this.phase !== 'main') {
+      this.log(`Cards can only be summoned or cast during Main Phase! (Currently in ${this.phase.toUpperCase()})`, 'log-trap');
+      return false;
+    }
+
     const active = this.getActivePlayer();
     const cardIndex = active.hand.findIndex(c => c.instanceId === instanceId);
     if (cardIndex === -1) return false;
@@ -177,12 +224,12 @@ class GameState {
     const isAscending = existingUnit && card.type === 'creature' && card.form > (existingUnit.form || 1);
 
     if (isAscending) {
-      // Ascension discount: saves 2 Aether!
+      // Ascension discount: saves (Base Form * 2) Aether!
       actualCost = Math.max(1, card.cost - (existingUnit.form * 2));
     }
 
     if (active.aether < actualCost) {
-      this.log(`Not enough Aether! (Needs ${actualCost})`, 'log-trap');
+      this.log(`Not enough Aether! (Needs ${actualCost}, has ${active.aether})`, 'log-trap');
       return false;
     }
 
@@ -194,9 +241,9 @@ class GameState {
     if (card.type === 'spell') {
       this.log(`${active.name} casts ${card.name}!`, 'log-summon');
       if (window.soundEngine) window.soundEngine.playSpell();
-      if (card.cast) card.cast(this, null, active.id === 1);
+      if (card.cast) card.cast(this, spellTarget, active.id === 1);
       active.graveyard.push(card);
-      this.notify();
+      this.notify({ type: 'spell_cast', card });
       return true;
     }
 
@@ -271,6 +318,16 @@ class GameState {
    * Attack with a friendly creature against enemy target
    */
   declareAttack(attackerInstanceId, targetType, targetIdOrLane) {
+    // If attacking while in Main Phase, automatically transition into Battle Phase
+    if (this.phase === 'main') {
+      this.setPhase('battle');
+    }
+
+    if (this.phase !== 'battle') {
+      this.log(`Attacks can only be declared during the Battle Phase!`, 'log-trap');
+      return false;
+    }
+
     const active = this.getActivePlayer();
     const opponent = this.getOpponentPlayer();
 
@@ -279,7 +336,13 @@ class GameState {
     const attacker = active.board[attackerLane];
 
     if (!attacker.canAttack || attacker.hasAttackedThisTurn || attacker.frozen) {
-      this.log(`${attacker.name} cannot attack right now!`, 'log-trap');
+      if (attacker.frozen) {
+        this.log(`${attacker.name} is Frozen and cannot attack this turn!`, 'log-trap');
+      } else if (attacker.hasAttackedThisTurn) {
+        this.log(`${attacker.name} has already attacked this turn!`, 'log-trap');
+      } else {
+        this.log(`${attacker.name} has Summoning Sickness and must wait until next turn to attack!`, 'log-trap');
+      }
       return false;
     }
 
@@ -289,7 +352,7 @@ class GameState {
     // Direct Attack against Opponent Vanguard
     if (targetType === 'vanguard') {
       if (tauntCreatures.length > 0) {
-        this.log(`Must destroy enemy Taunt guardians first!`, 'log-trap');
+        this.log(`Must destroy enemy Taunt guardians before attacking Vanguard!`, 'log-trap');
         return false;
       }
 
@@ -299,7 +362,7 @@ class GameState {
         this.log(`Attack negated by Secret Ward!`, 'log-trap');
         attacker.hasAttackedThisTurn = true;
         attacker.canAttack = false;
-        this.notify();
+        this.notify({ type: 'attack_negated', attacker });
         return true;
       }
 
@@ -307,18 +370,19 @@ class GameState {
       this.checkWards('on_vanguard_attacked', attacker, active.id !== 1);
 
       // Deal damage to hero
-      opponent.vanguard.hp -= attacker.currentAtk;
+      const dmgDealt = attacker.currentAtk;
+      opponent.vanguard.hp -= dmgDealt;
       attacker.hasAttackedThisTurn = true;
       attacker.canAttack = false;
-      this.log(`${attacker.name} strikes ${opponent.vanguard.name} directly for ${attacker.currentAtk} damage!`, 'log-attack');
+      this.log(`${attacker.name} strikes ${opponent.vanguard.name} directly for ${dmgDealt} damage!`, 'log-attack');
 
       if (attacker.lifesteal) {
-        this.healVanguard(attacker.currentAtk, active.id === 1);
+        this.healVanguard(dmgDealt, active.id === 1);
       }
 
       if (window.soundEngine) window.soundEngine.playAttack();
       this.checkWinCondition();
-      this.notify();
+      this.notify({ type: 'combat_hit', targetType: 'vanguard', targetId: opponent.id, damage: dmgDealt, attackerLane });
       return true;
     }
 
@@ -330,38 +394,43 @@ class GameState {
 
       // If there's Taunt and target doesn't have Taunt, must target Taunt
       if (tauntCreatures.length > 0 && !defender.hasTaunt) {
-        this.log(`Must target Taunt creature first!`, 'log-trap');
+        this.log(`Must target enemy Taunt guardian first!`, 'log-trap');
         return false;
       }
 
       // Check creature attack wards
       this.checkWards('on_creature_attack', attacker, active.id !== 1);
 
-      this.log(`${attacker.name} attacks ${defender.name}!`, 'log-attack');
+      this.log(`${attacker.name} (${attacker.currentAtk}/${attacker.currentHp}) attacks ${defender.name} (${defender.currentAtk}/${defender.currentHp})!`, 'log-attack');
       if (window.soundEngine) window.soundEngine.playAttack();
 
       // Resolve Combat Damage simultaneously
+      let dmgToDefender = attacker.currentAtk;
+      let dmgToAttacker = defender.currentAtk;
+
       // Defender damage taken
       if (defender.hasAegis) {
         defender.hasAegis = false;
+        dmgToDefender = 0;
         this.log(`${defender.name}'s Aegis absorbed the blow!`, 'log-summon');
       } else {
-        defender.currentHp -= attacker.currentAtk;
+        defender.currentHp -= dmgToDefender;
       }
 
       // Attacker retribution damage taken
       if (attacker.hasAegis) {
         attacker.hasAegis = false;
+        dmgToAttacker = 0;
         this.log(`${attacker.name}'s Aegis absorbed the blow!`, 'log-summon');
       } else {
-        attacker.currentHp -= defender.currentAtk;
+        attacker.currentHp -= dmgToAttacker;
       }
 
       attacker.hasAttackedThisTurn = true;
       attacker.canAttack = false;
 
-      if (attacker.lifesteal) {
-        this.healVanguard(attacker.currentAtk, active.id === 1);
+      if (attacker.lifesteal && dmgToDefender > 0) {
+        this.healVanguard(dmgToDefender, active.id === 1);
       }
 
       // Check for creature deaths
@@ -380,7 +449,15 @@ class GameState {
       }
 
       this.checkWinCondition();
-      this.notify();
+      this.notify({ 
+        type: 'combat_clash', 
+        attackerLane, 
+        defenderLane, 
+        attackerDmg: dmgToDefender, 
+        retributionDmg: dmgToAttacker,
+        defenderDied: defender.currentHp <= 0,
+        attackerDied: attacker.currentHp <= 0
+      });
       return true;
     }
 
@@ -391,6 +468,10 @@ class GameState {
    * Activate Vanguard Hero Power
    */
   activateHeroPower() {
+    if (this.phase !== 'main') {
+      this.log('Hero Power can only be activated during Main Phase!', 'log-trap');
+      return false;
+    }
     const active = this.getActivePlayer();
     if (active.vanguard.heroPowerUsed) {
       this.log('Hero Power already used this turn!', 'log-trap');
@@ -553,9 +634,47 @@ class GameState {
   }
 
   damageTarget(target, amount, isPlayer1) {
-    if (!target) return;
-    if (target.currentHp !== undefined) {
-      target.currentHp -= amount;
+    const opponent = this.players[isPlayer1 ? 1 : 0];
+    if (!target) {
+      this.dealDamageToLowestOpponent(amount, isPlayer1);
+      return;
+    }
+
+    if (target === 'vanguard' || (target && target.type === 'vanguard')) {
+      this.dealDamageToOpponentHero(amount, isPlayer1);
+      return;
+    }
+
+    // Target creature
+    let unit = null;
+    let lane = -1;
+    if (typeof target === 'number') {
+      lane = target;
+      unit = opponent.board[lane];
+    } else if (target.instanceId) {
+      lane = opponent.board.findIndex(c => c && c.instanceId === target.instanceId);
+      unit = lane !== -1 ? opponent.board[lane] : target;
+    } else if (target.currentHp !== undefined) {
+      unit = target;
+      lane = opponent.board.indexOf(unit);
+    }
+
+    if (unit) {
+      if (unit.hasAegis) {
+        unit.hasAegis = false;
+        this.log(`${unit.name}'s Aegis absorbed the ${amount} damage!`, 'log-summon');
+      } else {
+        unit.currentHp -= amount;
+        this.log(`${unit.name} took ${amount} damage!`, 'log-attack');
+        if (unit.currentHp <= 0) {
+          this.log(`${unit.name} was destroyed!`, 'log-attack');
+          if (lane !== -1) opponent.board[lane] = null;
+          opponent.graveyard.push(unit);
+          if (unit.onDeath) unit.onDeath(this, opponent.id === 1);
+        }
+      }
+      this.checkWinCondition();
+      this.notify({ type: 'target_damaged', unit, amount });
     }
   }
 

@@ -137,19 +137,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard Hotkeys
   window.addEventListener('keydown', (e) => {
-    // Space to pass turn
-    if (e.code === 'Space' && !['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) {
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+    // Space or Enter to step phase / pass turn
+    if (e.code === 'Space' || e.code === 'Enter') {
       e.preventDefault();
       if (currentGame && !currentGame.winner) {
         if (currentGame.isPrivacyCurtainActive) {
           currentGame.revealAndStartTurn();
-        } else {
+        } else if (currentGame.phase === 'main' || currentGame.phase === 'draw') {
+          currentGame.setPhase('battle');
+        } else if (currentGame.phase === 'battle') {
           currentGame.endTurn();
         }
       }
     }
+    // B to enter Battle Phase
+    if (e.key === 'b' || e.key === 'B') {
+      if (currentGame && !currentGame.winner && currentGame.phase === 'main') {
+        currentGame.setPhase('battle');
+      }
+    }
+    // E to end turn immediately
+    if (e.key === 'e' || e.key === 'E') {
+      if (currentGame && !currentGame.winner && !currentGame.isPrivacyCurtainActive) {
+        currentGame.endTurn();
+      }
+    }
+    // R to toggle Quick Rules
+    if (e.key === 'r' || e.key === 'R') {
+      const quickRulesModal = document.getElementById('quick-rules-modal');
+      if (quickRulesModal) quickRulesModal.classList.toggle('active');
+    }
     // M to toggle mute
-    if ((e.key === 'm' || e.key === 'M') && !['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) {
+    if (e.key === 'm' || e.key === 'M') {
       if (soundBtn) soundBtn.click();
     }
   });

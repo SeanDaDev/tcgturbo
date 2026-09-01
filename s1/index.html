@@ -79,9 +79,19 @@
           <span id="arena-round-badge">Round 1</span>
         </div>
 
-        <div class="phase-tracker">
-          <span class="phase-step active" id="phase-step-main">Main Phase</span>
-          <span class="phase-step" id="phase-step-battle">Combat Ready</span>
+        <div class="phase-tracker" id="arena-phase-tracker">
+          <button type="button" class="phase-step" id="phase-step-draw" data-phase="draw" title="Phase 1: Draw & Surge (Replenish Aether & Draw)">
+            <span class="phase-num">1</span> Draw
+          </button>
+          <button type="button" class="phase-step active" id="phase-step-main" data-phase="main" title="Phase 2: Main Action Phase (Summon, Spells, Wards)">
+            <span class="phase-num">2</span> Main
+          </button>
+          <button type="button" class="phase-step" id="phase-step-battle" data-phase="battle" title="Phase 3: Combat / Battle Phase (Declare attacks)">
+            <span class="phase-num">3</span> Battle ⚔️
+          </button>
+          <button type="button" class="phase-step" id="phase-step-end" data-phase="end" title="Phase 4: End Phase (Resolve effects & Pass)">
+            <span class="phase-num">4</span> End 🛡️
+          </button>
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center;">
@@ -89,6 +99,7 @@
             <option value="couch_2p" selected>👥 Local 2P Couch Co-op</option>
             <option value="solo_ai">🤖 Solo vs AI Tactician</option>
           </select>
+          <button id="btn-quick-rules" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;" title="View Turn Phases & Official Rules">📜 Rules</button>
           <button id="btn-new-match" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">New Duel</button>
         </div>
       </div>
@@ -197,7 +208,11 @@
                 </div>
               </div>
               <div class="battle-actions-bar">
-                <button id="btn-end-turn" class="btn-end-turn">End Turn (Space)</button>
+                <button id="btn-phase-action" class="btn-phase-action btn-to-battle" title="Advance to Battle Phase or End Turn (Space / Enter)">
+                  <span id="btn-phase-action-icon">⚔️</span>
+                  <span id="btn-phase-action-text">Battle Phase (Space)</span>
+                </button>
+                <button id="btn-end-turn" class="btn-end-turn-secondary" title="End Turn immediately">End Turn</button>
               </div>
             </div>
           </div>
@@ -602,13 +617,76 @@
   </div>
 
   <!-- ==========================================================================
-       VICTORY / DEFEAT GAME OVER MODAL
+       CINEMATIC PHASE BANNER OVERLAY
        ========================================================================== -->
-  <div id="gameover-modal" class="gameover-modal">
-    <div class="gameover-box">
-      <h2 class="gameover-title victory">VICTORY</h2>
-      <p class="gameover-desc">The Astral Nexus acknowledges the superior Vanguard.</p>
-      <button id="btn-play-again" class="btn btn-gold" style="padding: 14px 32px; font-size: 1.1rem;">Play Again</button>
+  <div id="phase-banner-overlay" class="phase-banner-overlay">
+    <div class="phase-banner-content">
+      <span class="phase-banner-sub">PHASE TRANSITION</span>
+      <h2 class="phase-banner-title" id="phase-banner-title">MAIN PHASE</h2>
+      <p class="phase-banner-hint" id="phase-banner-hint">Play creatures, ascend forms, or cast spells.</p>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       DYNAMIC COMBAT FORECAST TOOLTIP
+       ========================================================================== -->
+  <div id="combat-forecast-tooltip" class="combat-forecast-tooltip">
+    <div class="forecast-header">⚔️ Combat Forecast</div>
+    <div class="forecast-body">
+      <div class="forecast-row">
+        <span>Attacker Damage:</span>
+        <strong id="forecast-atk-dmg" style="color: #ef4444;">-0</strong>
+      </div>
+      <div class="forecast-row">
+        <span>Defender Retribution:</span>
+        <strong id="forecast-retrib-dmg" style="color: #f59e0b;">-0</strong>
+      </div>
+      <div class="forecast-result" id="forecast-outcome">Ready to strike</div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       QUICK RULES & PHASES CHEAT SHEET MODAL
+       ========================================================================== -->
+  <div id="quick-rules-modal" class="quick-rules-modal">
+    <div class="quick-rules-dialog">
+      <div class="quick-rules-header">
+        <h3 style="font-family: var(--font-display); font-size: 1.2rem; color: #ffd700; margin: 0;">📜 Turn Phases & Combat Rules</h3>
+        <button id="quick-rules-close-btn" class="inspector-close-btn">✕</button>
+      </div>
+      <div class="quick-rules-body">
+        <div class="quick-rule-card">
+          <div class="quick-rule-badge">Phase 1</div>
+          <div>
+            <strong>Surge & Draw Step:</strong>
+            <p>Max Aether increases by +1 (up to 10), Aether refills to 100%, draw 1 card, and all non-frozen creatures awaken.</p>
+          </div>
+        </div>
+
+        <div class="quick-rule-card">
+          <div class="quick-rule-badge" style="background: rgba(234, 179, 8, 0.2); color: #fde047;">Phase 2</div>
+          <div>
+            <strong>Main Action Phase:</strong>
+            <p>Spend Aether to summon Form I creatures, ascend into Form II/III (saves 2 Aether!), cast spells, set secret wards, or surge your Vanguard's Hero Power (2 Aether).</p>
+          </div>
+        </div>
+
+        <div class="quick-rule-card">
+          <div class="quick-rule-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">Phase 3</div>
+          <div>
+            <strong>Combat / Battle Phase:</strong>
+            <p>Click any ready creature to engage the laser crosshair. Strike enemy creatures in lanes or directly target the enemy Vanguard! Combat damage is simultaneous. Units with [Taunt] must be eliminated first.</p>
+          </div>
+        </div>
+
+        <div class="quick-rule-card">
+          <div class="quick-rule-badge" style="background: rgba(168, 85, 247, 0.2); color: #c084fc;">Phase 4</div>
+          <div>
+            <strong>End Phase & Handover:</strong>
+            <p>Click End Turn (or press Space). In Couch Co-Op, the privacy shield secures your secrets before passing the screen to Player 2.</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

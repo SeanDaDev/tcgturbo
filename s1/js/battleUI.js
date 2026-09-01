@@ -7,8 +7,9 @@ class BattleUI {
     this.game = null;
     this.selectedAttackerId = null;
     this.selectedHandCardId = null;
-    this.isDraggingCard = false;
-    this.draggedCardId = null;
+    this.targetedSpellCardId = null;
+    this.lastObservedPhase = null;
+    this.bannerTimeout = null;
   }
 
   init(gameState) {
@@ -17,11 +18,56 @@ class BattleUI {
     this.bindStaticEvents();
     this.render();
 
-    // Subscribe to state changes
-    this.game.subscribe(() => this.render());
+    // Subscribe to state changes and combat events
+    this.game.subscribe((game, eventData) => {
+      this.handleGameEvent(eventData);
+      this.render();
+    });
+  }
+
+  handleGameEvent(eventData) {
+    if (!eventData) return;
+
+    if (eventData.type === 'phase_change') {
+      const hints = {
+        draw: 'Aether is replenished and a card is drawn.',
+        main: 'Play creatures, ascend forms, cast spells, or use hero powers.',
+        battle: 'Command ready units to attack enemy lanes or the Vanguard!',
+        end: 'Turn concluding. Prepare for handover.'
+      };
+      this.showPhaseBanner(eventData.phase.toUpperCase() + ' PHASE', hints[eventData.phase] || '');
+    } else if (eventData.type === 'combat_hit') {
+      if (eventData.targetType === 'vanguard') {
+        const heroBox = document.getElementById(`p${eventData.targetId}-vanguard-box`);
+        if (heroBox && eventData.damage > 0) {
+          this.spawnFloatingNumber(heroBox, `-${eventData.damage}`, 'damage');
+        }
+      }
+    } else if (eventData.type === 'combat_clash') {
+      const oppId = this.game.currentTurn === 1 ? 2 : 1;
+      const myId = this.game.currentTurn;
+      const defSlot = document.querySelector(`#p${oppId}-lanes .creature-lane-slot[data-lane="${eventData.defenderLane}"]`);
+      const atkSlot = document.querySelector(`#p${myId}-lanes .creature-lane-slot[data-lane="${eventData.attackerLane}"]`);
+
+      if (defSlot && eventData.attackerDmg > 0) {
+        this.spawnFloatingNumber(defSlot, `-${eventData.attackerDmg}`, 'damage');
+      }
+      if (atkSlot && eventData.retributionDmg > 0) {
+        this.spawnFloatingNumber(atkSlot, `-${eventData.retributionDmg}`, 'damage');
+      }
+    }
   }
 
   bindStaticEvents() {
+    // Dynamic Phase Progression Button
+    const phaseActionBtn = document.getElementById('btn-phase-action');
+    if (phaseActionBtn) {
+      phaseActionBtn.addEventListener('click', () => {
+        this.handlePhaseAction();
+      });
+    }
+
+    // End Turn Secondary Button
     const endTurnBtn = document.getElementById('btn-end-turn');
     if (endTurnBtn) {
       endTurnBtn.addEventListener('click', () => {
@@ -31,6 +77,44 @@ class BattleUI {
       });
     }
 
+    // Phase Bar Clickable Step Pills
+    const phaseSteps = document.querySelectorAll('.phase-step');
+    phaseSteps.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetPhase = btn.dataset.phase;
+        if (!this.game || this.game.winner || this.game.getActivePlayer().isAI) return;
+
+        if (targetPhase === 'main') {
+          this.game.setPhase('main');
+        } else if (targetPhase === 'battle') {
+          this.game.setPhase('battle');
+        } else if (targetPhase === 'end') {
+          this.game.endTurn();
+        }
+      });
+    });
+
+    // Quick Rules Dialog
+    const quickRulesBtn = document.getElementById('btn-quick-rules');
+    const quickRulesModal = document.getElementById('quick-rules-modal');
+    const quickRulesClose = document.getElementById('quick-rules-close-btn');
+
+    if (quickRulesBtn && quickRulesModal) {
+      quickRulesBtn.addEventListener('click', () => {
+        quickRulesModal.classList.add('active');
+        if (window.soundEngine) window.soundEngine.playHover();
+      });
+    }
+    if (quickRulesClose && quickRulesModal) {
+      quickRulesClose.addEventListener('click', () => {
+        quickRulesModal.classList.remove('active');
+      });
+      quickRulesModal.addEventListener('click', (e) => {
+        if (e.target === quickRulesModal) quickRulesModal.classList.remove('active');
+      });
+    }
+
+    // Privacy Shield Ready Button
     const privacyReadyBtn = document.getElementById('privacy-ready-btn');
     if (privacyReadyBtn) {
       privacyReadyBtn.addEventListener('click', () => {
@@ -40,38 +124,91 @@ class BattleUI {
       });
     }
 
-    const heroPowerBtn = document.getElementById('player-hero-power-btn');
-    if (heroPowerBtn) {
-      heroPowerBtn.addEventListener('click', () => {
-        if (this.game && !this.game.winner) {
-          this.game.activateHeroPower();
-        }
-      });
-    }
+    // Hero Power Buttons
+    ['p1', 'p2'].forEach((prefix, idx) => {
+      const heroPowerBtn = document.getElementById(`${prefix}-hero-power-btn`);
+      if (heroPowerBtn) {
+        heroPowerBtn.addEventListener('click', () => {
+          if (this.game && !this.game.winner && this.game.currentTurn === idx + 1) {
+            this.game.activateHeroPower();
+          }
+        });
+      }
+    });
 
-    // Cancel targeting on escape or right click
+    // Cancel targeting on escape
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.clearSelections();
+      if (e.key === 'Escape') {
+        this.clearSelections();
+        if (quickRulesModal) quickRulesModal.classList.remove('active');
+      }
     });
 
     window.addEventListener('click', (e) => {
-      if (!e.target.closest('.card') && !e.target.closest('.creature-lane-slot') && !e.target.closest('.vanguard-box')) {
+      if (!e.target.closest('.card') && 
+          !e.target.closest('.creature-lane-slot') && 
+          !e.target.closest('.vanguard-box') && 
+          !e.target.closest('.btn-phase-action') &&
+          !e.target.closest('.phase-step')) {
         this.clearSelections();
       }
     });
 
-    // Mouse movement for attack arrow
+    // Mouse movement for attack arrow & forecast tooltip
     window.addEventListener('mousemove', (e) => {
-      if (this.selectedAttackerId) {
+      if (this.selectedAttackerId || this.targetedSpellCardId) {
         this.updateAttackArrow(e.clientX, e.clientY);
+        this.updateForecastTooltip(e.clientX, e.clientY, e.target);
       }
     });
+  }
+
+  handlePhaseAction() {
+    if (!this.game || this.game.winner || this.game.getActivePlayer().isAI) return;
+
+    if (this.game.phase === 'main' || this.game.phase === 'draw') {
+      this.game.setPhase('battle');
+    } else if (this.game.phase === 'battle') {
+      this.game.endTurn();
+    }
+  }
+
+  showPhaseBanner(title, hint) {
+    const banner = document.getElementById('phase-banner-overlay');
+    if (!banner) return;
+
+    const titleEl = document.getElementById('phase-banner-title');
+    const hintEl = document.getElementById('phase-banner-hint');
+
+    if (titleEl) titleEl.textContent = title;
+    if (hintEl) hintEl.textContent = hint;
+
+    banner.classList.add('show');
+    if (this.bannerTimeout) clearTimeout(this.bannerTimeout);
+    this.bannerTimeout = setTimeout(() => {
+      banner.classList.remove('show');
+    }, 1100);
+  }
+
+  spawnFloatingNumber(targetEl, text, type = 'damage') {
+    if (!targetEl) return;
+    const rect = targetEl.getBoundingClientRect();
+    const floatEl = document.createElement('div');
+    floatEl.className = `floating-combat-num ${type}`;
+    floatEl.textContent = text;
+    floatEl.style.left = `${rect.left + rect.width / 2 - 20}px`;
+    floatEl.style.top = `${rect.top + 10}px`;
+    document.body.appendChild(floatEl);
+
+    setTimeout(() => floatEl.remove(), 1000);
   }
 
   clearSelections() {
     this.selectedAttackerId = null;
     this.selectedHandCardId = null;
+    this.targetedSpellCardId = null;
     this.clearAttackArrow();
+    this.hideForecastTooltip();
     this.updateTargetingHighlights();
   }
 
@@ -100,8 +237,9 @@ class BattleUI {
     // Check Couch Co-Op Privacy Curtain
     this.updatePrivacyCurtain();
 
-    // Update Topbar match info
+    // Update Topbar match info & Phase Tracker
     this.updateTopbar();
+    this.updatePhaseTrackerUI();
 
     // Update Both Vanguards
     this.updateVanguardUI(1);
@@ -125,12 +263,53 @@ class BattleUI {
     // Update Logs
     this.renderLogs();
 
-    // Update End Turn button state
+    // Update Dynamic Action Buttons
+    this.updateActionButtons();
+  }
+
+  updatePhaseTrackerUI() {
+    const activePhase = this.game.phase || 'main';
+    const steps = document.querySelectorAll('.phase-step');
+    steps.forEach(step => {
+      const p = step.dataset.phase;
+      if (p === activePhase) {
+        step.classList.add('active');
+      } else {
+        step.classList.remove('active');
+      }
+    });
+  }
+
+  updateActionButtons() {
+    const phaseActionBtn = document.getElementById('btn-phase-action');
+    const phaseActionText = document.getElementById('btn-phase-action-text');
+    const phaseActionIcon = document.getElementById('btn-phase-action-icon');
     const endTurnBtn = document.getElementById('btn-end-turn');
+
+    const active = this.game.getActivePlayer();
+    const isAI = active.isAI;
+    const isGameOver = this.game.winner !== null;
+
+    if (phaseActionBtn && phaseActionText) {
+      phaseActionBtn.disabled = isGameOver || isAI;
+
+      if (isAI) {
+        phaseActionText.textContent = 'AI Thinking...';
+        if (phaseActionIcon) phaseActionIcon.textContent = '🤖';
+        phaseActionBtn.className = 'btn-phase-action';
+      } else if (this.game.phase === 'main' || this.game.phase === 'draw') {
+        phaseActionText.textContent = 'Battle Phase (Space)';
+        if (phaseActionIcon) phaseActionIcon.textContent = '⚔️';
+        phaseActionBtn.className = 'btn-phase-action btn-to-battle';
+      } else if (this.game.phase === 'battle') {
+        phaseActionText.textContent = 'End Turn (Space)';
+        if (phaseActionIcon) phaseActionIcon.textContent = '🛡️';
+        phaseActionBtn.className = 'btn-phase-action btn-to-end';
+      }
+    }
+
     if (endTurnBtn) {
-      const active = this.game.getActivePlayer();
-      endTurnBtn.disabled = this.game.winner !== null || (active.isAI);
-      endTurnBtn.textContent = active.isAI ? 'AI Thinking...' : 'End Turn';
+      endTurnBtn.disabled = isGameOver || isAI;
     }
   }
 
@@ -161,7 +340,6 @@ class BattleUI {
 
   updateVanguardUI(playerId) {
     const player = this.game.players[playerId - 1];
-    const isPlayerZone = (this.game.currentTurn === playerId) || (this.game.mode === 'solo_ai' && playerId === 1);
     const prefix = playerId === 1 ? 'p1' : 'p2';
 
     // Health
@@ -195,16 +373,24 @@ class BattleUI {
     const powerBtn = document.getElementById(`${prefix}-hero-power-btn`);
     if (powerBtn) {
       powerBtn.title = `${player.vanguard.heroPower.name} (${player.vanguard.heroPower.cost} Aether): ${player.vanguard.heroPower.desc}`;
-      powerBtn.disabled = player.vanguard.heroPowerUsed || player.aether < player.vanguard.heroPower.cost || this.game.currentTurn !== playerId;
+      powerBtn.disabled = player.vanguard.heroPowerUsed || 
+                          player.aether < player.vanguard.heroPower.cost || 
+                          this.game.currentTurn !== playerId || 
+                          this.game.phase !== 'main';
     }
 
     // Targetable Hero click handler
     const heroBox = document.getElementById(`${prefix}-vanguard-box`);
     if (heroBox) {
+      heroBox.classList.toggle('active-turn', this.game.currentTurn === playerId);
       heroBox.onclick = () => {
         if (this.selectedAttackerId && this.game.currentTurn !== playerId) {
           // Declare direct attack on opponent hero
           this.game.declareAttack(this.selectedAttackerId, 'vanguard', null);
+          this.clearSelections();
+        } else if (this.targetedSpellCardId && this.game.currentTurn !== playerId) {
+          // Cast targeted spell on Vanguard
+          this.game.playCard(this.targetedSpellCardId, null, 'vanguard');
           this.clearSelections();
         }
       };
@@ -228,24 +414,45 @@ class BattleUI {
       if (creature) {
         const isTurnOwner = this.game.currentTurn === playerId;
         const isReady = isTurnOwner && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen;
-        const customClasses = `${isReady ? 'ready-to-attack' : ''} ${creature.instanceId === this.selectedAttackerId ? 'active-attacker' : ''}`;
+        const isAttacker = creature.instanceId === this.selectedAttackerId;
+        const customClasses = `${isReady ? 'ready-to-attack' : ''} ${isAttacker ? 'active-attacker' : ''}`;
 
-        const cardEl = window.CardComponent.createCardElement(creature, { customClasses });
+        const cardEl = window.CardComponent.createCardElement(creature, { 
+          isOnBoard: true, 
+          customClasses 
+        });
 
         // Click on friendly creature to select as attacker
         cardEl.onclick = (e) => {
           e.stopPropagation();
-          if (isTurnOwner && isReady && (!player.isAI)) {
-            if (this.selectedAttackerId === creature.instanceId) {
-              this.clearSelections();
+          if (isTurnOwner && (!player.isAI)) {
+            if (isReady) {
+              if (this.selectedAttackerId === creature.instanceId) {
+                this.clearSelections();
+              } else {
+                // If currently in main phase, transition to battle phase
+                if (this.game.phase === 'main') {
+                  this.game.setPhase('battle');
+                }
+                this.selectedAttackerId = creature.instanceId;
+                this.targetedSpellCardId = null;
+                this.updateTargetingHighlights();
+                if (window.soundEngine) window.soundEngine.playHover();
+              }
+            } else if (creature.frozen) {
+              window.showToast(`${creature.name} is Frozen and cannot attack!`);
+            } else if (creature.hasAttackedThisTurn) {
+              window.showToast(`${creature.name} has already attacked this turn.`);
             } else {
-              this.selectedAttackerId = creature.instanceId;
-              this.updateTargetingHighlights();
-              if (window.soundEngine) window.soundEngine.playHover();
+              window.showToast(`${creature.name} has Summoning Sickness. Ready next turn!`);
             }
           } else if (this.selectedAttackerId && this.game.currentTurn !== playerId) {
             // Opponent creature clicked as attack target!
             this.game.declareAttack(this.selectedAttackerId, 'creature', laneIdx);
+            this.clearSelections();
+          } else if (this.targetedSpellCardId && this.game.currentTurn !== playerId) {
+            // Target of spell
+            this.game.playCard(this.targetedSpellCardId, null, creature);
             this.clearSelections();
           }
         };
@@ -331,7 +538,25 @@ class BattleUI {
         cardEl.onclick = (e) => {
           e.stopPropagation();
           if (this.game.currentTurn === playerId) {
-            // If spell or ward, play directly or select
+            if (this.game.phase !== 'main') {
+              window.showToast('Cards can only be summoned or cast in Main Phase!');
+              return;
+            }
+
+            // If spell with target
+            if (card.type === 'spell' && card.targetType === 'any_enemy') {
+              if (this.targetedSpellCardId === card.instanceId) {
+                this.clearSelections();
+              } else {
+                this.targetedSpellCardId = card.instanceId;
+                this.selectedAttackerId = null;
+                this.updateTargetingHighlights();
+                window.showToast(`Select enemy target for ${card.name}`);
+              }
+              return;
+            }
+
+            // Instant spell or ward
             if (card.type === 'spell' || card.type === 'ward') {
               this.game.playCard(card.instanceId);
               this.clearSelections();
@@ -371,7 +596,7 @@ class BattleUI {
     if (!logContainer) return;
 
     logContainer.innerHTML = '';
-    this.game.actionLogs.slice(0, 15).forEach(entry => {
+    this.game.actionLogs.slice(0, 18).forEach(entry => {
       const line = document.createElement('div');
       line.className = `log-entry ${entry.type}`;
       line.textContent = `[${entry.time}] ${entry.text}`;
@@ -381,39 +606,54 @@ class BattleUI {
 
   updateTargetingHighlights() {
     document.querySelectorAll('.card').forEach(c => c.classList.remove('valid-target', 'ascension-candidate'));
+    document.querySelectorAll('.vanguard-box').forEach(v => v.classList.remove('valid-target'));
 
-    if (this.selectedAttackerId) {
+    if (this.selectedAttackerId || this.targetedSpellCardId) {
       const opponentId = this.game.currentTurn === 1 ? 2 : 1;
       const opponent = this.game.players[opponentId - 1];
       const tauntBlockers = opponent.board.filter(c => c && c.hasTaunt);
 
-      if (tauntBlockers.length > 0) {
-        // Only Taunt creatures are valid
+      if (tauntBlockers.length > 0 && this.selectedAttackerId) {
+        // Only Taunt creatures are valid targets for physical attack
         document.querySelectorAll(`#p${opponentId}-lanes .card`).forEach(cardEl => {
           const id = cardEl.dataset.id;
           const def = window.CARDS_DATA.find(c => c.id === id);
           if (def && def.hasTaunt) cardEl.classList.add('valid-target');
         });
       } else {
-        // All enemy creatures & hero are valid
+        // All enemy creatures & enemy vanguard are valid
         document.querySelectorAll(`#p${opponentId}-lanes .card`).forEach(cardEl => {
           cardEl.classList.add('valid-target');
         });
+        const oppVanguard = document.getElementById(`p${opponentId}-vanguard-box`);
+        if (oppVanguard) oppVanguard.classList.add('valid-target');
       }
     }
   }
 
   updateAttackArrow(mouseX, mouseY) {
-    if (!this.ctx || !this.selectedAttackerId) return;
+    if (!this.ctx) return;
 
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    const attackerEl = document.querySelector(`.card-wrapper[data-instance-id="${this.selectedAttackerId}"]`);
-    if (!attackerEl) return;
+    let startX = 0;
+    let startY = 0;
 
-    const rect = attackerEl.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top + rect.height / 2;
+    if (this.selectedAttackerId) {
+      const attackerEl = document.querySelector(`.card-wrapper[data-instance-id="${this.selectedAttackerId}"]`);
+      if (!attackerEl) return;
+      const rect = attackerEl.getBoundingClientRect();
+      startX = rect.left + rect.width / 2;
+      startY = rect.top + rect.height / 2;
+    } else if (this.targetedSpellCardId) {
+      const spellEl = document.querySelector(`.card-wrapper[data-instance-id="${this.targetedSpellCardId}"]`);
+      if (!spellEl) return;
+      const rect = spellEl.getBoundingClientRect();
+      startX = rect.left + rect.width / 2;
+      startY = rect.top + rect.height / 2;
+    } else {
+      return;
+    }
 
     // Draw glowing curved laser line
     this.ctx.save();
@@ -424,19 +664,86 @@ class BattleUI {
     const cpY = (startY + mouseY) / 2 - (mouseX - startX) * 0.15;
 
     this.ctx.quadraticCurveTo(cpX, cpY, mouseX, mouseY);
-    this.ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+    this.ctx.strokeStyle = this.targetedSpellCardId ? 'rgba(59, 130, 246, 0.85)' : 'rgba(239, 68, 68, 0.85)';
     this.ctx.lineWidth = 4;
-    this.ctx.shadowColor = '#ef4444';
+    this.ctx.shadowColor = this.targetedSpellCardId ? '#3b82f6' : '#ef4444';
     this.ctx.shadowBlur = 15;
     this.ctx.setLineDash([8, 4]);
     this.ctx.stroke();
 
     // Arrow head
-    this.ctx.fillStyle = '#ef4444';
+    this.ctx.fillStyle = this.targetedSpellCardId ? '#3b82f6' : '#ef4444';
     this.ctx.beginPath();
     this.ctx.arc(mouseX, mouseY, 8, 0, Math.PI * 2);
     this.ctx.fill();
     this.ctx.restore();
+  }
+
+  updateForecastTooltip(mouseX, mouseY, targetEl) {
+    const tooltip = document.getElementById('combat-forecast-tooltip');
+    if (!tooltip || !this.selectedAttackerId) {
+      this.hideForecastTooltip();
+      return;
+    }
+
+    const targetCardEl = targetEl.closest('.card');
+    const targetVanguardBox = targetEl.closest('.vanguard-box');
+
+    const activePlayer = this.game.getActivePlayer();
+    const attacker = activePlayer.board.find(c => c && c.instanceId === this.selectedAttackerId);
+    if (!attacker) {
+      this.hideForecastTooltip();
+      return;
+    }
+
+    const opponentId = this.game.currentTurn === 1 ? 2 : 1;
+    const opponent = this.game.players[opponentId - 1];
+
+    if (targetVanguardBox && targetVanguardBox.id === `p${opponentId}-vanguard-box`) {
+      // Forecast vs Vanguard
+      tooltip.style.left = `${mouseX + 16}px`;
+      tooltip.style.top = `${mouseY - 20}px`;
+      document.getElementById('forecast-atk-dmg').textContent = `-${attacker.currentAtk}`;
+      document.getElementById('forecast-retrib-dmg').textContent = `0 (Hero)`;
+      document.getElementById('forecast-outcome').textContent = `Direct Vanguard Strike!`;
+      tooltip.classList.add('active');
+      return;
+    }
+
+    if (targetCardEl) {
+      const laneSlot = targetCardEl.closest('.creature-lane-slot');
+      if (laneSlot && parseInt(laneSlot.dataset.player, 10) === opponentId) {
+        const laneIdx = parseInt(laneSlot.dataset.lane, 10);
+        const defender = opponent.board[laneIdx];
+        if (defender) {
+          tooltip.style.left = `${mouseX + 16}px`;
+          tooltip.style.top = `${mouseY - 20}px`;
+
+          const dmgToDef = defender.hasAegis ? 0 : attacker.currentAtk;
+          const dmgToAtk = attacker.hasAegis ? 0 : defender.currentAtk;
+
+          document.getElementById('forecast-atk-dmg').textContent = defender.hasAegis ? 'Aegis Block' : `-${dmgToDef}`;
+          document.getElementById('forecast-retrib-dmg').textContent = attacker.hasAegis ? 'Aegis Block' : `-${dmgToAtk}`;
+
+          let outcome = 'Clash';
+          if (dmgToDef >= defender.currentHp && dmgToAtk < attacker.currentHp) outcome = '⚔️ Destroys Enemy!';
+          else if (dmgToDef >= defender.currentHp && dmgToAtk >= attacker.currentHp) outcome = '💥 Mutual Destruction!';
+          else if (dmgToDef < defender.currentHp && dmgToAtk >= attacker.currentHp) outcome = '💀 Attacker Falls!';
+          else outcome = '🛡️ Both Survive';
+
+          document.getElementById('forecast-outcome').textContent = outcome;
+          tooltip.classList.add('active');
+          return;
+        }
+      }
+    }
+
+    this.hideForecastTooltip();
+  }
+
+  hideForecastTooltip() {
+    const tooltip = document.getElementById('combat-forecast-tooltip');
+    if (tooltip) tooltip.classList.remove('active');
   }
 
   clearAttackArrow() {

@@ -91,6 +91,33 @@ class CardComponent {
       `;
     }
 
+    // Status badges on board
+    let statusBadgesHtml = '';
+    if (cardData.type === 'creature') {
+      if (cardData.frozen) {
+        card.classList.add('is-frozen');
+        statusBadgesHtml += `<span class="card-status-badge status-frozen">❄️ Frozen</span>`;
+      }
+      if (cardData.hasAegis) {
+        statusBadgesHtml += `<span class="card-status-badge status-aegis">✨ Aegis</span>`;
+      }
+      if (cardData.hasTaunt || (cardData.keywords && cardData.keywords.includes('Taunt'))) {
+        card.classList.add('has-taunt');
+        statusBadgesHtml += `<span class="card-status-badge status-taunt">🛡️ Taunt</span>`;
+      }
+      if (options.isOnBoard) {
+        if (cardData.canAttack && !cardData.hasAttackedThisTurn && !cardData.frozen) {
+          statusBadgesHtml += `<span class="card-status-badge status-ready">⚡ Ready</span>`;
+        } else if (!cardData.canAttack && !cardData.hasAttackedThisTurn && !cardData.frozen) {
+          card.classList.add('has-sickness');
+          statusBadgesHtml += `<span class="card-status-badge status-sickness" title="Summoning Sickness (Can attack next turn)">💤 Sleep</span>`;
+        } else if (cardData.hasAttackedThisTurn) {
+          card.classList.add('is-exhausted');
+          statusBadgesHtml += `<span class="card-status-badge status-exhausted">✓ Done</span>`;
+        }
+      }
+    }
+
     card.innerHTML = `
       <div class="card-inner">
         <!-- 3D Foil & Glare Layers -->
@@ -109,6 +136,7 @@ class CardComponent {
           <img src="${artSrc}" alt="${cardData.name}" class="card-art-img" ${cropStyle} loading="lazy" />
           ${formLabel ? `<div class="card-form-badge" title="Ascension Form ${formLabel}">Form ${formLabel}</div>` : ''}
           <div class="card-type-tag">${cardData.element} ${cardData.type}</div>
+          ${statusBadgesHtml ? `<div class="card-status-badges-row">${statusBadgesHtml}</div>` : ''}
         </div>
 
         <!-- Ability Box -->

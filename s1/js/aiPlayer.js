@@ -14,19 +14,30 @@ class AIPlayer {
 
     try {
       // Small pause before AI acts
-      await this.sleep(700);
+      await this.sleep(600);
 
-      // Phase 1: Play Cards & Ascend
+      // Step into Main Phase
+      if (game.phase !== 'main') {
+        game.setPhase('main');
+        await this.sleep(700);
+      }
+
+      // Phase 2: Play Cards & Ascend
       await this.playCardsPhase(game);
 
-      // Phase 2: Hero Power
+      // Try Hero Power
       await this.tryHeroPower(game);
 
-      // Phase 3: Declare Attacks
+      // Transition to Phase 3: Battle Phase
+      await this.sleep(600);
+      game.setPhase('battle');
+      await this.sleep(700);
+
+      // Declare Attacks
       await this.declareAttacksPhase(game);
 
       // Finish Turn
-      await this.sleep(600);
+      await this.sleep(700);
       game.endTurn();
     } catch (e) {
       console.error("AI turn error:", e);
@@ -82,7 +93,9 @@ class AIPlayer {
       // 3. Play Spells if beneficial
       const spellCard = ai.hand.find(c => c.type === 'spell' && c.cost <= ai.aether);
       if (spellCard) {
-        game.playCard(spellCard.instanceId);
+        // If spell targets any enemy, target lowest opponent or vanguard
+        const target = game.players[0].board.find(c => c !== null) || 'vanguard';
+        game.playCard(spellCard.instanceId, null, target);
         cardsPlayed++;
         keepTrying = true;
         await this.sleep(650);

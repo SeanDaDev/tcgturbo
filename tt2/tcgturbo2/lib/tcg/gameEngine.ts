@@ -1,0 +1,1439 @@
+import { CARDS_DATA } from './cardsData';
+import { VANGUARDS_DATA } from './vanguardsData';
+import { PRESET_DECKS } from './presetDecks';
+import { soundEngine } from './soundEngine';
+import {
+  CardDef,
+  CardInstance,
+  GameState,
+  PlayerState,
+  GameMode,
+  ActionLog,
+  FloatingCombatText
+} from './types';
+
+let instanceCounter = 1;
+let rngSeed = 1337;
+
+export function pseudoRandom(): number {
+  rngSeed = (rngSeed * 1664525 + 1013904223) % 4294967296;
+  return rngSeed / 4294967296;
+}
+
+export function instantiateCard(cardDef: CardDef): CardInstance {
+  return {
+    ...cardDef,
+    instanceId: `card_${instanceCounter++}`,
+    currentAtk: cardDef.atk || 0,
+    currentHp: cardDef.hp || 0,
+    maxHp: cardDef.hp || 0,
+    canAttack: false,
+    frozen: false,
+    hasAttackedThisTurn: false,
+    hasAegis: !!cardDef.hasAegis
+  };
+}
+
+export function createPlayer(
+  id: 1 | 2,
+  name: string,
+  isAI: boolean,
+  deckCardIds: string[],
+  vanguardId: string
+): PlayerState {
+  const vanguardDef = VANGUARDS_DATA.find(v => v.id === vanguardId) || VANGUARDS_DATA[0];
+
+  const deck: CardInstance[] = [];
+  deckCardIds.forEach(cardId => {
+    const def = CARDS_DATA.find(c => c.id === cardId);
+    if (def) {
+      deck.push(instantiateCard(def));
+    }
+  });
+
+  // Deterministic shuffle deck
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(pseudoRandom() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+
+  return {
+    id,
+    name,
+    isAI,
+    vanguard: {
+      ...vanguardDef,
+      heroPowerUsed: false
+    },
+    mana: 1,
+    maxMana: 1,
+    deck,
+    hand: [],
+    board: [null, null, null, null, null],
+    wards: [null, null, null],
+    graveyard: [],
+    extraTurns: 0
+  };
+}
+
+export function createInitialGame(
+  mode: GameMode = 'solo_ai',
+  p1DeckKey: string = 'solar_pyre',
+  p2DeckKey: string = 'void_shadow',
+  customP1Cards?: string[],
+  customP2Cards?: string[]
+): GameState {
+  const p1Preset = PRESET_DECKS[p1DeckKey] || PRESET_DECKS.solar_pyre;
+  const p2Preset = PRESET_DECKS[p2DeckKey] || PRESET_DECKS.void_shadow;
+
+  const p1Cards = customP1Cards && customP1Cards.length >= 10 ? customP1Cards : p1Preset.cards;
+  const p2Cards = customP2Cards && customP2Cards.length >= 10 ? customP2Cards : p2Preset.cards;
+
+  const p1 = createPlayer(1, 'Player 1', false, p1Cards, p1Preset.vanguard);
+  const p2 = createPlayer(2, mode === 'solo_ai' ? 'AI Tactician' : 'Player 2', mode === 'solo_ai', p2Cards, p2Preset.vanguard);
+
+  let state: GameState = {
+    mode,
+    round: 1,
+    currentTurn: 1,
+    phase: 'main',
+    isPrivacyCurtainActive: false,
+    winner: null,
+    players: [p1, p2],
+    actionLogs: [],
+    floatingTexts: []
+  };
+
+  // Draw 4 cards for each player
+  for (let i = 0; i < 4; i++) {
+    state = drawCardInternal(state, 1, false);
+    state = drawCardInternal(state, 2, false);
+  }
+
+  state = logMessage(state, `Duel begins! ${state.players[0].name} vs ${state.players[1].name}`, 'log-turn');
+  return state;
+}
+
+export function logMessage(
+  state: GameState,
+  text: string,
+  type: ActionLog['type'] = 'log-info'
+): GameState {
+  const newLog: ActionLog = {
+    id: `log_${instanceCounter++}`,
+    text,
+    type,
+    time: typeof window !== 'undefined' ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '00:00:00'
+  };
+  return {
+    ...state,
+    actionLogs: [newLog, ...state.actionLogs.slice(0, 40)]
+  };
+}
+
+export function addFloatingText(
+  state: GameState,
+  text: string,
+  type: FloatingCombatText['type'],
+  x: number = 0,
+  y: number = 0
+): GameState {
+  const fct: FloatingCombatText = {
+    id: `fct_${instanceCounter++}`,
+    text,
+    type,
+    x,
+    y
+  };
+  return {
+    ...state,
+    floatingTexts: [...state.floatingTexts, fct]
+  };
+}
+
+export function clearFloatingTexts(state: GameState): GameState {
+  if (state.floatingTexts.length === 0) return state;
+  return {
+    ...state,
+    floatingTexts: []
+  };
+}
+
+export function drawCardInternal(
+  state: GameState,
+  playerId: 1 | 2,
+  playSound: boolean = true
+): GameState {
+  const playerIndex = playerId - 1;
+  const player = state.players[playerIndex];
+
+  // Fatigue
+  if (player.deck.length === 0) {
+    const nextHp = player.vanguard.hp - 2;
+    let nextState = {
+      ...state,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex
+          ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextHp) } }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+    nextState = logMessage(nextState, `${player.name} takes 2 Fatigue damage! (Deck Empty)`, 'log-attack');
+    return checkWinCondition(nextState);
+  }
+
+  const [drawn, ...remainingDeck] = player.deck;
+
+  // Hand limit of 8
+  if (player.hand.length >= 8) {
+    let nextState = {
+      ...state,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex
+          ? {
+              ...p,
+              deck: remainingDeck,
+              graveyard: [...p.graveyard, drawn]
+            }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+    nextState = logMessage(nextState, `${player.name}'s hand is full! ${drawn.name} was burned to Graveyard.`, 'log-trap');
+    return nextState;
+  }
+
+  if (playSound) soundEngine.playCardDraw();
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex
+        ? {
+            ...p,
+            deck: remainingDeck,
+            hand: [...p.hand, drawn]
+          }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+export function startTurn(state: GameState, playSound: boolean = true): GameState {
+  const activeId = state.currentTurn;
+  const activeIndex = activeId - 1;
+  const active = state.players[activeIndex];
+
+  const currentMax = active.maxMana ?? (active as any).maxAether ?? 1;
+
+  // Increase Max Mana (up to 10)
+  let nextMax = currentMax;
+  if (state.round > 1 || activeId === 2) {
+    nextMax = Math.min(10, currentMax + 1);
+  }
+
+  // Ready all friendly creatures & thaw frozen units
+  const nextBoard = active.board.map(creature => {
+    if (!creature) return null;
+    if (creature.frozen) {
+      return {
+        ...creature,
+        frozen: false,
+        canAttack: false,
+        hasAttackedThisTurn: false
+      };
+    }
+    return {
+      ...creature,
+      canAttack: true,
+      hasAttackedThisTurn: false
+    };
+  });
+
+  let nextState: GameState = {
+    ...state,
+    phase: 'main',
+    isPrivacyCurtainActive: false,
+    players: state.players.map((p, idx) =>
+      idx === activeIndex
+        ? {
+            ...p,
+            maxMana: nextMax,
+            mana: nextMax,
+            board: nextBoard,
+            vanguard: {
+              ...p.vanguard,
+              heroPowerUsed: false
+            }
+          }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+
+  // Draw 1 card at start of turn
+  nextState = drawCardInternal(nextState, activeId, playSound);
+  nextState = logMessage(
+    nextState,
+    `${active.name}'s turn begins (Mana: ${nextMax}/${nextMax})`,
+    'log-turn'
+  );
+
+  if (playSound) soundEngine.playTurnChime();
+  return nextState;
+}
+
+export function calculateAscensionCost(card: CardInstance, existingUnit: CardInstance | null): number {
+  if (
+    existingUnit &&
+    card.type === 'creature' &&
+    card.form &&
+    existingUnit.form &&
+    card.form > existingUnit.form
+  ) {
+    return Math.max(1, card.cost - existingUnit.form * 2);
+  }
+  return card.cost;
+}
+
+export function playCard(
+  state: GameState,
+  instanceId: string,
+  targetLaneIndex: number | null = null,
+  targetUnitId: string | null = null
+): GameState {
+  if (state.winner) return state;
+
+  const activeIndex = state.currentTurn - 1;
+  const opponentIndex = state.currentTurn === 1 ? 1 : 0;
+  const active = state.players[activeIndex];
+
+  const cardIndex = active.hand.findIndex(c => c.instanceId === instanceId);
+  if (cardIndex === -1) return state;
+
+  const card = active.hand[cardIndex];
+
+  // Check lane & ascension
+  let lane = targetLaneIndex;
+  if (lane === null || lane < 0 || lane > 4) {
+    lane = active.board.findIndex(slot => slot === null);
+  }
+
+  const existingUnit = lane !== null && lane >= 0 ? active.board[lane] : null;
+  const isAscending =
+    !!existingUnit &&
+    card.type === 'creature' &&
+    !!card.form &&
+    !!existingUnit.form &&
+    card.form > existingUnit.form;
+
+  const actualCost = calculateAscensionCost(card, existingUnit);
+  const currentMana = active.mana ?? (active as any).aether ?? 0;
+
+  if (currentMana < actualCost) {
+    return logMessage(state, `Not enough Mana! (Requires ${actualCost})`, 'log-trap');
+  }
+
+  // Remove card from hand and deduct cost
+  const nextHand = active.hand.filter((_, idx) => idx !== cardIndex);
+  let nextMana = currentMana - actualCost;
+
+  let nextPlayers = [...state.players] as [PlayerState, PlayerState];
+  nextPlayers[activeIndex] = {
+    ...active,
+    mana: nextMana,
+    hand: nextHand
+  };
+
+  let nextState: GameState = {
+    ...state,
+    players: nextPlayers
+  };
+
+  // 1. SPELL CARD
+  if (card.type === 'spell') {
+    soundEngine.playSpell();
+    nextState = logMessage(nextState, `${active.name} casts ${card.name}!`, 'log-summon');
+
+    // Handle Spell Effects
+    if (card.id === 'spell_solar_lance') {
+      // Deal 3 damage to target enemy
+      nextState = dealDirectOrUnitDamage(nextState, opponentIndex, 3, targetUnitId);
+    } else if (card.id === 'spell_void_drain') {
+      // Deal 3 damage to enemy unit and heal vanguard 3
+      nextState = dealDirectOrUnitDamage(nextState, opponentIndex, 3, targetUnitId);
+      nextState = healVanguard(nextState, activeIndex, 3);
+    } else if (card.id === 'spell_feral_surge') {
+      // Buff friendly unit +2/+3
+      nextState = buffFriendlyUnit(nextState, activeIndex, 2, 3, targetUnitId);
+    } else if (card.id === 'spell_tidal_wave') {
+      // Deal 2 damage to all enemy units and freeze them
+      nextState = aoeDamageAndFreezeEnemies(nextState, opponentIndex, 2);
+    } else if (card.id === 'spell_temporal_rewind') {
+      // Heal vanguard 6 and draw 1
+      nextState = healVanguard(nextState, activeIndex, 6);
+      nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
+    }
+
+    // Add to graveyard
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((p, idx) =>
+        idx === activeIndex
+          ? { ...p, graveyard: [...p.graveyard, card] }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+
+    return checkWinCondition(nextState);
+  }
+
+  // 2. SECRET WARD
+  if (card.type === 'ward') {
+    const emptyWardSlot = active.wards.findIndex(w => w === null);
+    if (emptyWardSlot === -1) {
+      return logMessage(state, 'All Secret Ward rune slots are full!', 'log-trap');
+    }
+
+    soundEngine.playSpell();
+    nextState = logMessage(nextState, `${active.name} places a facedown Secret Ward!`, 'log-trap');
+
+    const nextWards = [...active.wards];
+    nextWards[emptyWardSlot] = card;
+
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((p, idx) =>
+        idx === activeIndex ? { ...p, wards: nextWards } : p
+      ) as [PlayerState, PlayerState]
+    };
+
+    return nextState;
+  }
+
+  // 3. CREATURE SUMMON OR ASCENSION
+  if (card.type === 'creature') {
+    if (lane === -1 && !isAscending) {
+      return logMessage(state, 'All battlefield creature lanes are occupied!', 'log-trap');
+    }
+
+    const nextBoard = [...active.board];
+
+    if (isAscending && existingUnit) {
+      // IN-PLACE ASCENSION
+      soundEngine.playAscend();
+      const ascendedUnit: CardInstance = {
+        ...card,
+        currentAtk: Math.max(card.atk || 0, existingUnit.currentAtk + 1),
+        currentHp: card.hp || 0,
+        maxHp: card.hp || 0,
+        canAttack: true, // Instant Ascension Rush!
+        hasAttackedThisTurn: false,
+        frozen: false,
+        hasAegis: card.hasAegis || existingUnit.hasAegis,
+        isAscended: true
+      };
+
+      nextBoard[lane] = ascendedUnit;
+      nextState = logMessage(
+        nextState,
+        `${active.name} ASCENDED ${existingUnit.name} into ${card.name}! (Cost Discount Applied)`,
+        'log-ascend'
+      );
+
+      nextState = {
+        ...nextState,
+        players: nextState.players.map((p, idx) =>
+          idx === activeIndex ? { ...p, board: nextBoard } : p
+        ) as [PlayerState, PlayerState]
+      };
+
+      // Trigger Ascension Burst Abilities
+      if (card.id === 'ignis_apex') {
+        // AoE 3 to all enemy units
+        nextState = aoeDamageEnemies(nextState, opponentIndex, 3);
+      } else if (card.id === 'void_reaper_apex') {
+        // Destroy lowest health enemy creature
+        nextState = destroyLowestHealthEnemy(nextState, opponentIndex);
+      } else if (card.id === 'yggdrasil_titan') {
+        // Heal 4 to all friendly units and vanguard
+        nextState = healAllFriendly(nextState, activeIndex, 4);
+      } else if (card.id === 'verdant_hydra_apex') {
+        // +1 permanent max mana
+        nextState = grantPermanentMana(nextState, activeIndex, 1);
+      } else if (card.id === 'tethys_tide_weaver') {
+        // Draw 2 and freeze all enemy units
+        nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
+        nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
+        nextState = freezeAllEnemies(nextState, opponentIndex);
+      } else if (card.id === 'kraken_apex') {
+        // Bounce enemy creature
+        nextState = bounceOpponentUnit(nextState, opponentIndex);
+      } else if (card.id === 'astral_seer') {
+        // Discover card
+        nextState = discoverCard(nextState, activeIndex);
+      } else if (card.id === 'astral_chronos_apex') {
+        // Extra turn
+        nextState = grantExtraTurn(nextState, activeIndex);
+      }
+
+      // Check opponent wards: on_enemy_ascend
+      nextState = checkAndTriggerWards(nextState, opponentIndex, 'on_enemy_ascend', ascendedUnit);
+
+      return checkWinCondition(nextState);
+    } else {
+      // FRESH SUMMON
+      soundEngine.playSummon();
+      const summonedUnit: CardInstance = {
+        ...card,
+        canAttack: !!card.canAttackOnSummon, // Rush units attack immediately
+        hasAttackedThisTurn: false,
+        frozen: false
+      };
+
+      nextBoard[lane] = summonedUnit;
+      nextState = logMessage(
+        nextState,
+        `${active.name} summoned ${card.name} into Lane ${lane + 1}`,
+        'log-summon'
+      );
+
+      nextState = {
+        ...nextState,
+        players: nextState.players.map((p, idx) =>
+          idx === activeIndex ? { ...p, board: nextBoard } : p
+        ) as [PlayerState, PlayerState]
+      };
+
+      // Battlecries
+      if (card.id === 'sol_initiate') {
+        nextState = dealDirectOrLowestDamage(nextState, opponentIndex, 1);
+      } else if (card.id === 'tide_siren_initiate') {
+        nextState = freezeTargetCreature(nextState, opponentIndex);
+      } else if (card.id === 'aurelius_chronomancer') {
+        nextState = reduceHandCosts(nextState, activeIndex, 1);
+      }
+
+      return checkWinCondition(nextState);
+    }
+  }
+
+  return nextState;
+}
+
+export function declareAttack(
+  state: GameState,
+  attackerInstanceId: string,
+  targetType: 'vanguard' | 'creature',
+  targetLaneOrId: number | string | null = null
+): GameState {
+  if (state.winner) return state;
+
+  const activeIndex = state.currentTurn - 1;
+  const opponentIndex = state.currentTurn === 1 ? 1 : 0;
+  const active = state.players[activeIndex];
+  const opponent = state.players[opponentIndex];
+
+  const attackerLane = active.board.findIndex(c => c && c.instanceId === attackerInstanceId);
+  if (attackerLane === -1) return state;
+  const attacker = active.board[attackerLane];
+  if (!attacker || !attacker.canAttack || attacker.hasAttackedThisTurn || attacker.frozen) {
+    return logMessage(state, `${attacker?.name || 'Creature'} cannot attack right now!`, 'log-trap');
+  }
+
+  const tauntCreatures = opponent.board.filter(c => c && c.hasTaunt);
+
+  // 1. ATTACK ENEMY VANGUARD
+  if (targetType === 'vanguard') {
+    if (tauntCreatures.length > 0) {
+      return logMessage(state, `Taunt guardian is blocking direct attacks! Destroy it first.`, 'log-trap');
+    }
+
+    // Check direct attack ward triggers (e.g. Glacial Stasis Ward negates & freezes)
+    const { state: wardState, negated } = checkWardNegation(
+      state,
+      opponentIndex,
+      'on_direct_attack',
+      attacker
+    );
+    if (negated) {
+      soundEngine.playTrap();
+      let s = logMessage(wardState, `Direct strike negated by Secret Ward!`, 'log-trap');
+      // Attacker exhausts
+      s = exhaustCreature(s, activeIndex, attackerLane);
+      return s;
+    }
+
+    // Check vanguard attacked wards (e.g. Sunfire Sigil deals 4 to attacker)
+    let nextState = checkAndTriggerWards(wardState, opponentIndex, 'on_vanguard_attacked', attacker);
+
+    soundEngine.playAttack();
+    const damage = attacker.currentAtk;
+    const nextOppHp = opponent.vanguard.hp - damage;
+
+    nextState = logMessage(
+      nextState,
+      `${attacker.name} strikes ${opponent.vanguard.name} directly for ${damage} damage!`,
+      'log-attack'
+    );
+
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((p, idx) =>
+        idx === opponentIndex
+          ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextOppHp) } }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+
+    // Lifesteal
+    if (attacker.lifesteal) {
+      nextState = healVanguard(nextState, activeIndex, damage);
+    }
+
+    // Check lethal ward (Continuum Collapse Ward)
+    if (nextOppHp <= 0) {
+      nextState = checkLethalWard(nextState, opponentIndex);
+    }
+
+    nextState = exhaustCreature(nextState, activeIndex, attackerLane);
+    return checkWinCondition(nextState);
+  }
+
+  // 2. ATTACK ENEMY CREATURE IN LANE
+  if (targetType === 'creature') {
+    const defenderLane = typeof targetLaneOrId === 'number' ? targetLaneOrId : parseInt(`${targetLaneOrId}`, 10);
+    const defender = opponent.board[defenderLane];
+    if (!defender) return state;
+
+    if (tauntCreatures.length > 0 && !defender.hasTaunt) {
+      return logMessage(state, `Must attack the Taunt guardian first!`, 'log-trap');
+    }
+
+    // Check on_creature_attack ward (e.g. Thornsnare destroys attacker if <= 3 HP)
+    let nextState = checkAndTriggerWards(state, opponentIndex, 'on_creature_attack', attacker);
+
+    // If attacker died from ward before damage
+    const liveAttacker = nextState.players[activeIndex].board[attackerLane];
+    if (!liveAttacker || liveAttacker.currentHp <= 0) {
+      return checkWinCondition(nextState);
+    }
+
+    soundEngine.playAttack();
+    nextState = logMessage(
+      nextState,
+      `${attacker.name} attacks ${defender.name}! (Simultaneous Clash)`,
+      'log-attack'
+    );
+
+    let defenderHp = defender.currentHp;
+    let attackerHp = liveAttacker.currentHp;
+    let defHasAegis = defender.hasAegis;
+    let attHasAegis = liveAttacker.hasAegis;
+
+    // Defender takes damage
+    if (defHasAegis) {
+      defHasAegis = false;
+      nextState = logMessage(nextState, `${defender.name}'s Aegis absorbed the blow!`, 'log-summon');
+    } else {
+      defenderHp -= liveAttacker.currentAtk;
+    }
+
+    // Attacker takes retribution damage
+    if (attHasAegis) {
+      attHasAegis = false;
+      nextState = logMessage(nextState, `${liveAttacker.name}'s Aegis absorbed the retribution!`, 'log-summon');
+    } else {
+      attackerHp -= defender.currentAtk;
+    }
+
+    // Update attacker & defender states
+    const nextActiveBoard = [...nextState.players[activeIndex].board];
+    const nextOppBoard = [...nextState.players[opponentIndex].board];
+    let nextActiveGrave = [...nextState.players[activeIndex].graveyard];
+    let nextOppGrave = [...nextState.players[opponentIndex].graveyard];
+
+    if (defenderHp <= 0) {
+      nextOppBoard[defenderLane] = null;
+      nextOppGrave.push(defender);
+      nextState = logMessage(nextState, `${defender.name} was destroyed!`, 'log-attack');
+      if (defender.keywords?.includes('Deathrattle') || defender.id === 'void_stalker') {
+        nextState = drawCardInternal(nextState, (opponentIndex + 1) as 1 | 2);
+      }
+    } else {
+      nextOppBoard[defenderLane] = {
+        ...defender,
+        currentHp: defenderHp,
+        hasAegis: defHasAegis
+      };
+    }
+
+    if (attackerHp <= 0) {
+      nextActiveBoard[attackerLane] = null;
+      nextActiveGrave.push(liveAttacker);
+      nextState = logMessage(nextState, `${liveAttacker.name} was destroyed!`, 'log-attack');
+      if (liveAttacker.keywords?.includes('Deathrattle') || liveAttacker.id === 'void_stalker') {
+        nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
+      }
+    } else {
+      nextActiveBoard[attackerLane] = {
+        ...liveAttacker,
+        currentHp: attackerHp,
+        hasAegis: attHasAegis,
+        canAttack: false,
+        hasAttackedThisTurn: true
+      };
+    }
+
+    if (liveAttacker.lifesteal) {
+      nextState = healVanguard(nextState, activeIndex, liveAttacker.currentAtk);
+    }
+
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((p, idx) => {
+        if (idx === activeIndex) {
+          return { ...p, board: nextActiveBoard, graveyard: nextActiveGrave };
+        }
+        if (idx === opponentIndex) {
+          return { ...p, board: nextOppBoard, graveyard: nextOppGrave };
+        }
+        return p;
+      }) as [PlayerState, PlayerState]
+    };
+
+    return checkWinCondition(nextState);
+  }
+
+  return state;
+}
+
+export function activateHeroPower(state: GameState): GameState {
+  if (state.winner) return state;
+
+  const activeIndex = state.currentTurn - 1;
+  const opponentIndex = state.currentTurn === 1 ? 1 : 0;
+  const active = state.players[activeIndex];
+
+  if (active.vanguard.heroPowerUsed) {
+    return logMessage(state, 'Hero Power already used this turn!', 'log-trap');
+  }
+
+  const powerCost = active.vanguard.heroPower.cost;
+  const currentMana = active.mana ?? (active as any).aether ?? 0;
+
+  if (currentMana < powerCost) {
+    return logMessage(state, `Not enough Mana! (Requires ${powerCost})`, 'log-trap');
+  }
+
+  soundEngine.playSpell();
+  let nextState: GameState = {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === activeIndex
+        ? {
+            ...p,
+            mana: currentMana - powerCost,
+            vanguard: { ...p.vanguard, heroPowerUsed: true }
+          }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+
+  nextState = logMessage(
+    nextState,
+    `${active.name} activated Hero Power: ${active.vanguard.heroPower.name}!`,
+    'log-summon'
+  );
+
+  // Execute Specific Champion Power
+  if (active.vanguard.id === 'sol_champion') {
+    // 2 damage to enemy vanguard or lowest unit
+    nextState = dealDirectOrLowestDamage(nextState, opponentIndex, 2);
+  } else if (active.vanguard.id === 'void_champion') {
+    // Give random friendly unit +2 ATK
+    nextState = buffRandomFriendlyUnitAtk(nextState, activeIndex, 2);
+  } else if (active.vanguard.id === 'verdant_champion') {
+    // Restore 3 HP to Vanguard
+    nextState = healVanguard(nextState, activeIndex, 3);
+  } else if (active.vanguard.id === 'tide_champion') {
+    // Grant friendly creature Aegis
+    nextState = grantRandomFriendlyAegis(nextState, activeIndex);
+  } else if (active.vanguard.id === 'astral_champion') {
+    // Gain +1 temporary mana and draw 1
+    nextState = grantTemporaryMana(nextState, activeIndex, 1);
+    nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
+  }
+
+  return checkWinCondition(nextState);
+}
+
+export function endTurn(state: GameState): GameState {
+  if (state.winner) return state;
+
+  const activeIndex = state.currentTurn - 1;
+  const active = state.players[activeIndex];
+
+  // Check extra turns (Chronos Lord of Eternity)
+  if (active.extraTurns > 0) {
+    const nextPlayers = state.players.map((p, idx) =>
+      idx === activeIndex ? { ...p, extraTurns: p.extraTurns - 1 } : p
+    ) as [PlayerState, PlayerState];
+    let nextState = logMessage(
+      { ...state, players: nextPlayers },
+      `CHRONO SURGE: ${active.name} takes an EXTRA TURN!`,
+      'log-ascend'
+    );
+    return startTurn(nextState);
+  }
+
+  const nextTurnId = state.currentTurn === 1 ? 2 : 1;
+  const nextRound = nextTurnId === 1 ? state.round + 1 : state.round;
+
+  if (state.mode === 'couch_2p') {
+    return {
+      ...state,
+      currentTurn: nextTurnId,
+      round: nextRound,
+      isPrivacyCurtainActive: true
+    };
+  } else {
+    const nextState: GameState = {
+      ...state,
+      currentTurn: nextTurnId,
+      round: nextRound,
+      isPrivacyCurtainActive: false
+    };
+    return startTurn(nextState);
+  }
+}
+
+export function revealPrivacyAndStartTurn(state: GameState): GameState {
+  return startTurn({
+    ...state,
+    isPrivacyCurtainActive: false
+  });
+}
+
+export function checkWinCondition(state: GameState): GameState {
+  const p1Hp = state.players[0].vanguard.hp;
+  const p2Hp = state.players[1].vanguard.hp;
+
+  if (p1Hp <= 0 && p2Hp <= 0) {
+    soundEngine.playTrap();
+    return logMessage({ ...state, winner: 'draw' }, 'Stalemate! Both Vanguards have fallen.', 'log-trap');
+  } else if (p2Hp <= 0) {
+    soundEngine.playVictory();
+    return logMessage(
+      { ...state, winner: 1 },
+      `VICTORY! ${state.players[0].name} has conquered the Astral Nexus!`,
+      'log-ascend'
+    );
+  } else if (p1Hp <= 0) {
+    soundEngine.playAttack();
+    return logMessage(
+      { ...state, winner: 2 },
+      `DEFEAT! ${state.players[1].name} claims supremacy!`,
+      'log-attack'
+    );
+  }
+
+  return state;
+}
+
+// ==========================================
+// EFFECT HELPERS
+// ==========================================
+
+function healVanguard(state: GameState, playerIndex: number, amount: number): GameState {
+  const player = state.players[playerIndex];
+  const newHp = Math.min(player.vanguard.maxHp, player.vanguard.hp + amount);
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex
+        ? { ...p, vanguard: { ...p.vanguard, hp: newHp } }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function dealDirectOrUnitDamage(
+  state: GameState,
+  targetPlayerIndex: number,
+  amount: number,
+  targetUnitId: string | null
+): GameState {
+  const targetPlayer = state.players[targetPlayerIndex];
+
+  if (targetUnitId) {
+    const laneIdx = targetPlayer.board.findIndex(c => c && c.instanceId === targetUnitId);
+    if (laneIdx !== -1) {
+      const unit = targetPlayer.board[laneIdx]!;
+      const nextBoard = [...targetPlayer.board];
+      const nextGrave = [...targetPlayer.graveyard];
+
+      if (unit.hasAegis) {
+        nextBoard[laneIdx] = { ...unit, hasAegis: false };
+      } else {
+        const nextHp = unit.currentHp - amount;
+        if (nextHp <= 0) {
+          nextBoard[laneIdx] = null;
+          nextGrave.push(unit);
+        } else {
+          nextBoard[laneIdx] = { ...unit, currentHp: nextHp };
+        }
+      }
+
+      return {
+        ...state,
+        players: state.players.map((p, idx) =>
+          idx === targetPlayerIndex ? { ...p, board: nextBoard, graveyard: nextGrave } : p
+        ) as [PlayerState, PlayerState]
+      };
+    }
+  }
+
+  // Default: hit vanguard
+  const nextHp = targetPlayer.vanguard.hp - amount;
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === targetPlayerIndex
+        ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextHp) } }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function dealDirectOrLowestDamage(
+  state: GameState,
+  targetPlayerIndex: number,
+  amount: number
+): GameState {
+  const targetPlayer = state.players[targetPlayerIndex];
+  const liveUnits = targetPlayer.board
+    .map((unit, idx) => ({ unit, idx }))
+    .filter((entry): entry is { unit: CardInstance; idx: number } => entry.unit !== null);
+
+  if (liveUnits.length > 0) {
+    liveUnits.sort((a, b) => a.unit.currentHp - b.unit.currentHp);
+    const target = liveUnits[0];
+    const nextBoard = [...targetPlayer.board];
+    const nextGrave = [...targetPlayer.graveyard];
+
+    if (target.unit.hasAegis) {
+      nextBoard[target.idx] = { ...target.unit, hasAegis: false };
+    } else {
+      const nextHp = target.unit.currentHp - amount;
+      if (nextHp <= 0) {
+        nextBoard[target.idx] = null;
+        nextGrave.push(target.unit);
+      } else {
+        nextBoard[target.idx] = { ...target.unit, currentHp: nextHp };
+      }
+    }
+
+    return {
+      ...state,
+      players: state.players.map((p, idx) =>
+        idx === targetPlayerIndex ? { ...p, board: nextBoard, graveyard: nextGrave } : p
+      ) as [PlayerState, PlayerState]
+    };
+  }
+
+  // Hit hero directly
+  const nextHp = targetPlayer.vanguard.hp - amount;
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === targetPlayerIndex
+        ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextHp) } }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function buffFriendlyUnit(
+  state: GameState,
+  playerIndex: number,
+  atkBuff: number,
+  hpBuff: number,
+  targetUnitId: string | null
+): GameState {
+  const player = state.players[playerIndex];
+  const nextBoard = [...player.board];
+
+  let targetIdx = targetUnitId
+    ? player.board.findIndex(c => c && c.instanceId === targetUnitId)
+    : player.board.findIndex(c => c !== null);
+
+  if (targetIdx !== -1 && nextBoard[targetIdx]) {
+    const unit = nextBoard[targetIdx]!;
+    nextBoard[targetIdx] = {
+      ...unit,
+      currentAtk: unit.currentAtk + atkBuff,
+      currentHp: unit.currentHp + hpBuff,
+      maxHp: unit.maxHp + hpBuff
+    };
+  }
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function aoeDamageEnemies(state: GameState, oppIndex: number, amount: number): GameState {
+  const opponent = state.players[oppIndex];
+  const nextBoard = [...opponent.board];
+  const nextGrave = [...opponent.graveyard];
+
+  opponent.board.forEach((unit, idx) => {
+    if (!unit) return;
+    if (unit.hasAegis) {
+      nextBoard[idx] = { ...unit, hasAegis: false };
+    } else {
+      const nextHp = unit.currentHp - amount;
+      if (nextHp <= 0) {
+        nextBoard[idx] = null;
+        nextGrave.push(unit);
+      } else {
+        nextBoard[idx] = { ...unit, currentHp: nextHp };
+      }
+    }
+  });
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex ? { ...p, board: nextBoard, graveyard: nextGrave } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function aoeDamageAndFreezeEnemies(state: GameState, oppIndex: number, amount: number): GameState {
+  const opponent = state.players[oppIndex];
+  const nextBoard = [...opponent.board];
+  const nextGrave = [...opponent.graveyard];
+
+  opponent.board.forEach((unit, idx) => {
+    if (!unit) return;
+    if (unit.hasAegis) {
+      nextBoard[idx] = { ...unit, hasAegis: false, frozen: true };
+    } else {
+      const nextHp = unit.currentHp - amount;
+      if (nextHp <= 0) {
+        nextBoard[idx] = null;
+        nextGrave.push(unit);
+      } else {
+        nextBoard[idx] = { ...unit, currentHp: nextHp, frozen: true };
+      }
+    }
+  });
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex ? { ...p, board: nextBoard, graveyard: nextGrave } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function freezeAllEnemies(state: GameState, oppIndex: number): GameState {
+  const opponent = state.players[oppIndex];
+  const nextBoard = opponent.board.map(u => (u ? { ...u, frozen: true } : null));
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function freezeTargetCreature(state: GameState, oppIndex: number): GameState {
+  const opponent = state.players[oppIndex];
+  const firstUnitIdx = opponent.board.findIndex(c => c !== null);
+  if (firstUnitIdx === -1) return state;
+
+  const nextBoard = [...opponent.board];
+  nextBoard[firstUnitIdx] = {
+    ...nextBoard[firstUnitIdx]!,
+    frozen: true
+  };
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function destroyLowestHealthEnemy(state: GameState, oppIndex: number): GameState {
+  const opponent = state.players[oppIndex];
+  const liveUnits = opponent.board
+    .map((unit, idx) => ({ unit, idx }))
+    .filter((entry): entry is { unit: CardInstance; idx: number } => entry.unit !== null);
+
+  if (liveUnits.length === 0) return state;
+  liveUnits.sort((a, b) => a.unit.currentHp - b.unit.currentHp);
+
+  const target = liveUnits[0];
+  const nextBoard = [...opponent.board];
+  nextBoard[target.idx] = null;
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex
+        ? {
+            ...p,
+            board: nextBoard,
+            graveyard: [...p.graveyard, target.unit]
+          }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function healAllFriendly(state: GameState, playerIndex: number, amount: number): GameState {
+  const player = state.players[playerIndex];
+  const nextVanguardHp = Math.min(player.vanguard.maxHp, player.vanguard.hp + amount);
+  const nextBoard = player.board.map(u =>
+    u ? { ...u, currentHp: Math.min(u.maxHp, u.currentHp + amount) } : null
+  );
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex
+        ? { ...p, vanguard: { ...p.vanguard, hp: nextVanguardHp }, board: nextBoard }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function grantPermanentMana(state: GameState, playerIndex: number, amount: number): GameState {
+  return {
+    ...state,
+    players: state.players.map((p, idx) => {
+      if (idx !== playerIndex) return p;
+      const cMax = p.maxMana ?? (p as any).maxAether ?? 1;
+      const cMana = p.mana ?? (p as any).aether ?? 1;
+      return {
+        ...p,
+        maxMana: Math.min(10, cMax + amount),
+        mana: Math.min(10, cMana + amount)
+      };
+    }) as [PlayerState, PlayerState]
+  };
+}
+
+function grantTemporaryMana(state: GameState, playerIndex: number, amount: number): GameState {
+  return {
+    ...state,
+    players: state.players.map((p, idx) => {
+      if (idx !== playerIndex) return p;
+      const cMana = p.mana ?? (p as any).aether ?? 1;
+      return { ...p, mana: cMana + amount };
+    }) as [PlayerState, PlayerState]
+  };
+}
+
+function reduceHandCosts(state: GameState, playerIndex: number, amount: number): GameState {
+  const player = state.players[playerIndex];
+  const nextHand = player.hand.map(c => ({
+    ...c,
+    cost: Math.max(0, c.cost - amount)
+  }));
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, hand: nextHand } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function discoverCard(state: GameState, playerIndex: number): GameState {
+  const highTierCards = CARDS_DATA.filter(c => c.form === 3 || c.rarity === 'legendary');
+  const picked = highTierCards[Math.floor(pseudoRandom() * highTierCards.length)];
+  const cardInst = instantiateCard(picked);
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, hand: [...p.hand, cardInst] } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function grantExtraTurn(state: GameState, playerIndex: number): GameState {
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, extraTurns: p.extraTurns + 1 } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function bounceOpponentUnit(state: GameState, oppIndex: number): GameState {
+  const opponent = state.players[oppIndex];
+  const nonApexUnits = opponent.board
+    .map((unit, idx) => ({ unit, idx }))
+    .filter((entry): entry is { unit: CardInstance; idx: number } => entry.unit !== null && (entry.unit.form || 1) < 3);
+
+  if (nonApexUnits.length === 0) return state;
+  const target = nonApexUnits[0];
+
+  const nextBoard = [...opponent.board];
+  nextBoard[target.idx] = null;
+  const nextHand = [...opponent.hand, target.unit];
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === oppIndex ? { ...p, board: nextBoard, hand: nextHand } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function buffRandomFriendlyUnitAtk(state: GameState, playerIndex: number, amount: number): GameState {
+  const player = state.players[playerIndex];
+  const firstUnitIdx = player.board.findIndex(c => c !== null);
+  if (firstUnitIdx === -1) return state;
+
+  const nextBoard = [...player.board];
+  nextBoard[firstUnitIdx] = {
+    ...nextBoard[firstUnitIdx]!,
+    currentAtk: nextBoard[firstUnitIdx]!.currentAtk + amount
+  };
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function grantRandomFriendlyAegis(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const candidateIdx = player.board.findIndex(c => c !== null && !c.hasAegis);
+  if (candidateIdx === -1) return state;
+
+  const nextBoard = [...player.board];
+  nextBoard[candidateIdx] = {
+    ...nextBoard[candidateIdx]!,
+    hasAegis: true
+  };
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function exhaustCreature(state: GameState, playerIndex: number, laneIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const unit = player.board[laneIndex];
+  if (!unit) return state;
+
+  const nextBoard = [...player.board];
+  nextBoard[laneIndex] = {
+    ...unit,
+    canAttack: false,
+    hasAttackedThisTurn: true
+  };
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
+}
+
+function checkAndTriggerWards(
+  state: GameState,
+  wardOwnerIndex: number,
+  triggerType: CardDef['trigger'],
+  triggeringPayload: CardInstance
+): GameState {
+  const wardOwner = state.players[wardOwnerIndex];
+  const wardIdx = wardOwner.wards.findIndex(w => w && w.trigger === triggerType);
+  if (wardIdx === -1) return state;
+
+  const ward = wardOwner.wards[wardIdx]!;
+  soundEngine.playTrap();
+
+  let nextState = logMessage(
+    state,
+    `SECRET WARD REVEALED: ${ward.name}! (${ward.desc})`,
+    'log-trap'
+  );
+
+  // Consume ward
+  const nextWards = [...wardOwner.wards];
+  nextWards[wardIdx] = null;
+  const nextGrave = [...wardOwner.graveyard, ward];
+
+  nextState = {
+    ...nextState,
+    players: nextState.players.map((p, idx) =>
+      idx === wardOwnerIndex ? { ...p, wards: nextWards, graveyard: nextGrave } : p
+    ) as [PlayerState, PlayerState]
+  };
+
+  // Execute specific ward effects
+  if (ward.id === 'ward_sunfire_retribution') {
+    // Deal 4 damage to attacker
+    const attackerOwnerIndex = wardOwnerIndex === 0 ? 1 : 0;
+    const attackerBoard = [...nextState.players[attackerOwnerIndex].board];
+    const attackerLane = attackerBoard.findIndex(c => c && c.instanceId === triggeringPayload.instanceId);
+    if (attackerLane !== -1 && attackerBoard[attackerLane]) {
+      const attUnit = attackerBoard[attackerLane]!;
+      const nextHp = attUnit.currentHp - 4;
+      if (nextHp <= 0) {
+        attackerBoard[attackerLane] = null;
+        nextState = {
+          ...nextState,
+          players: nextState.players.map((p, idx) =>
+            idx === attackerOwnerIndex
+              ? { ...p, board: attackerBoard, graveyard: [...p.graveyard, attUnit] }
+              : p
+          ) as [PlayerState, PlayerState]
+        };
+      } else {
+        attackerBoard[attackerLane] = { ...attUnit, currentHp: nextHp };
+        nextState = {
+          ...nextState,
+          players: nextState.players.map((p, idx) =>
+            idx === attackerOwnerIndex ? { ...p, board: attackerBoard } : p
+          ) as [PlayerState, PlayerState]
+        };
+      }
+    }
+  } else if (ward.id === 'ward_shadow_rift') {
+    // Reduce ascended enemy unit's ATK to 1
+    const ascOwnerIndex = wardOwnerIndex === 0 ? 1 : 0;
+    const ascBoard = [...nextState.players[ascOwnerIndex].board];
+    const ascLane = ascBoard.findIndex(c => c && c.instanceId === triggeringPayload.instanceId);
+    if (ascLane !== -1 && ascBoard[ascLane]) {
+      ascBoard[ascLane] = { ...ascBoard[ascLane]!, currentAtk: 1 };
+      nextState = {
+        ...nextState,
+        players: nextState.players.map((p, idx) =>
+          idx === ascOwnerIndex ? { ...p, board: ascBoard } : p
+        ) as [PlayerState, PlayerState]
+      };
+    }
+  } else if (ward.id === 'ward_briar_trap') {
+    // Destroy attacker if HP <= 3
+    if (triggeringPayload.currentHp <= 3) {
+      const attackerOwnerIndex = wardOwnerIndex === 0 ? 1 : 0;
+      const attackerBoard = [...nextState.players[attackerOwnerIndex].board];
+      const attackerLane = attackerBoard.findIndex(c => c && c.instanceId === triggeringPayload.instanceId);
+      if (attackerLane !== -1 && attackerBoard[attackerLane]) {
+        const att = attackerBoard[attackerLane]!;
+        attackerBoard[attackerLane] = null;
+        nextState = {
+          ...nextState,
+          players: nextState.players.map((p, idx) =>
+            idx === attackerOwnerIndex
+              ? { ...p, board: attackerBoard, graveyard: [...p.graveyard, att] }
+              : p
+          ) as [PlayerState, PlayerState]
+        };
+      }
+    }
+  }
+
+  return nextState;
+}
+
+function checkWardNegation(
+  state: GameState,
+  wardOwnerIndex: number,
+  triggerType: CardDef['trigger'],
+  attacker: CardInstance
+): { state: GameState; negated: boolean } {
+  const wardOwner = state.players[wardOwnerIndex];
+  const wardIdx = wardOwner.wards.findIndex(w => w && w.trigger === triggerType);
+  if (wardIdx === -1) return { state, negated: false };
+
+  const ward = wardOwner.wards[wardIdx]!;
+  if (ward.id === 'ward_frozen_tide') {
+    // Negate attack and freeze attacker
+    const nextWards = [...wardOwner.wards];
+    nextWards[wardIdx] = null;
+    const nextGrave = [...wardOwner.graveyard, ward];
+
+    const attackerOwnerIndex = wardOwnerIndex === 0 ? 1 : 0;
+    const attackerBoard = [...state.players[attackerOwnerIndex].board];
+    const attackerLane = attackerBoard.findIndex(c => c && c.instanceId === attacker.instanceId);
+    if (attackerLane !== -1 && attackerBoard[attackerLane]) {
+      attackerBoard[attackerLane] = {
+        ...attackerBoard[attackerLane]!,
+        frozen: true,
+        canAttack: false,
+        hasAttackedThisTurn: true
+      };
+    }
+
+    const nextState: GameState = {
+      ...state,
+      players: state.players.map((p, idx) => {
+        if (idx === wardOwnerIndex) return { ...p, wards: nextWards, graveyard: nextGrave };
+        if (idx === attackerOwnerIndex) return { ...p, board: attackerBoard };
+        return p;
+      }) as [PlayerState, PlayerState]
+    };
+
+    return {
+      state: logMessage(nextState, `GLACIAL STASIS WARD: Direct attack negated! Attacker is frozen.`, 'log-trap'),
+      negated: true
+    };
+  }
+
+  return { state, negated: false };
+}
+
+function checkLethalWard(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const wardIdx = player.wards.findIndex(w => w && w.trigger === 'on_lethal_damage');
+  if (wardIdx === -1) return state;
+
+  const ward = player.wards[wardIdx]!;
+  soundEngine.playTrap();
+
+  const nextWards = [...player.wards];
+  nextWards[wardIdx] = null;
+  const nextGrave = [...player.graveyard, ward];
+
+  let nextState: GameState = {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex
+        ? {
+            ...p,
+            vanguard: { ...p.vanguard, hp: 1 },
+            wards: nextWards,
+            graveyard: nextGrave
+          }
+        : p
+    ) as [PlayerState, PlayerState]
+  };
+
+  nextState = logMessage(
+    nextState,
+    `CONTINUUM COLLAPSE WARD: Fatal blow prevented! Vanguard HP locked at 1. Drawing 2 emergency cards.`,
+    'log-ascend'
+  );
+
+  nextState = drawCardInternal(nextState, (playerIndex + 1) as 1 | 2);
+  nextState = drawCardInternal(nextState, (playerIndex + 1) as 1 | 2);
+
+  return nextState;
+}

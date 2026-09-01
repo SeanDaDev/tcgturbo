@@ -1,58 +1,182 @@
-import { DeployButton } from "@/components/deploy-button";
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { AuthButton } from "@/components/auth-button";
-import { Hero } from "@/components/hero";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { ConnectSupabaseSteps } from "@/components/tutorial/connect-supabase-steps";
-import { SignUpUserSteps } from "@/components/tutorial/sign-up-user-steps";
-import { hasEnvVars } from "@/lib/utils";
-import Link from "next/link";
-import { Suspense } from "react";
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Header } from '@/components/tcg/Header';
+import { BattleArena } from '@/components/tcg/BattleArena';
+import { DeckBuilder } from '@/components/tcg/DeckBuilder';
+import { CardAlmanac } from '@/components/tcg/CardAlmanac';
+import { RulesCodex } from '@/components/tcg/RulesCodex';
+import { PrivacyCurtainModal } from '@/components/tcg/PrivacyCurtainModal';
+import { CardInspectorModal } from '@/components/tcg/CardInspectorModal';
+import { GameOverModal } from '@/components/tcg/GameOverModal';
+import { AmbientBackground } from '@/components/tcg/AmbientBackground';
+
+import {
+  createInitialGame,
+  revealPrivacyAndStartTurn,
+  endTurn
+} from '@/lib/tcg/gameEngine';
+import { executeAiTurn } from '@/lib/tcg/aiPlayer';
+import { GameState, CardDef, CardInstance, GameMode } from '@/lib/tcg/types';
+import { GAME_TITLES } from '@/lib/tcg/titlesData';
+import { soundEngine } from '@/lib/tcg/soundEngine';
 
 export default function Home() {
-  return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"}>Next.js Supabase Starter</Link>
-              <div className="flex items-center gap-2">
-                <DeployButton />
-              </div>
-            </div>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            )}
-          </div>
-        </nav>
-        <div className="flex-1 flex flex-col gap-20 max-w-5xl p-5">
-          <Hero />
-          <main className="flex-1 flex flex-col gap-6 px-4">
-            <h2 className="font-medium text-xl mb-4">Next steps</h2>
-            {hasEnvVars ? <SignUpUserSteps /> : <ConnectSupabaseSteps />}
-          </main>
-        </div>
+  const [activeTab, setActiveTab] = useState<'battle' | 'deckbuilder' | 'almanac' | 'lore'>('battle');
+  const [gameTitle, setGameTitle] = useState<string>(GAME_TITLES[0]);
+  const [gameMode, setGameMode] = useState<GameMode>('couch_2p');
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <p>
-            Powered by{" "}
-            <a
-              href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-              target="_blank"
-              className="font-bold hover:underline"
-              rel="noreferrer"
-            >
-              Supabase
-            </a>
-          </p>
-          <ThemeSwitcher />
-        </footer>
-      </div>
-    </main>
+  const [customP1Deck, setCustomP1Deck] = useState<string[] | undefined>(undefined);
+  const [customP2Deck, setCustomP2Deck] = useState<string[] | undefined>(undefined);
+
+  const [gameState, setGameState] = useState<GameState>(() =>
+    createInitialGame('couch_2p', 'solar_pyre', 'void_shadow')
+  );
+
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+
+  // New Duel Initializer
+  const handleStartNewDuel = useCallback(
+    (mode: GameMode = gameMode, p1Cards = customP1Deck, p2Cards = customP2Deck) => {
+      soundEngine.playTurnChime();
+      const newGame = createInitialGame(mode, 'solar_pyre', 'void_shadow', p1Cards, p2Cards);
+      setGameState(newGame);
+      setActiveTab('battle');
+    },
+    [gameMode, customP1Deck, customP2Deck]
+  );
+
+  // AI Turn Execution in Solo Mode
+  useEffect(() => {
+    if (
+      gameState.mode === 'solo_ai' &&
+      gameState.currentTurn === 2 &&
+      !gameState.winner &&
+      !gameState.isPrivacyCurtainActive
+    ) {
+      const timer = setTimeout(() => {
+        executeAiTurn(
+          () => gameStateRef.current,
+          updater => setGameState(updater)
+        );
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [gameState.mode, gameState.currentTurn, gameState.winner, gameState.isPrivacyCurtainActive]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      // Space to end turn or pass privacy curtain
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setGameState(current => {
+          if (current.winner) return current;
+          if (current.isPrivacyCurtainActive) {
+            return revealPrivacyAndStartTurn(current);
+          } else if (!current.players[current.currentTurn - 1].isAI) {
+            return endTurn(current);
+          }
+          return current;
+        });
+      }
+
+      // M to toggle audio
+      if (e.key === 'm' || e.key === 'M') {
+        const unmuted = soundEngine.toggleMute();
+        setIsMuted(!unmuted);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  return (
+    <div id="app" className="relative flex flex-col min-h-screen w-full bg-[#080911] text-slate-100 overflow-x-hidden">
+      {/* Ambient Cosmic Background */}
+      <AmbientBackground />
+
+      {/* Top Header Navigation & Utilities */}
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        gameTitle={gameTitle}
+        setGameTitle={setGameTitle}
+        gameMode={gameMode}
+        setGameMode={mode => {
+          setGameMode(mode);
+          handleStartNewDuel(mode);
+        }}
+        isMuted={isMuted}
+        setIsMuted={setIsMuted}
+        onNewMatch={() => handleStartNewDuel()}
+      />
+
+      {/* Main View Container */}
+      <main className="flex-1 flex flex-col w-full relative z-10">
+        {activeTab === 'battle' && (
+          <BattleArena
+            gameState={gameState}
+            setGameState={setGameState}
+            onInspectCard={card => setInspectedCard(card)}
+            onNewDuel={() => handleStartNewDuel()}
+          />
+        )}
+
+        {activeTab === 'deckbuilder' && (
+          <DeckBuilder
+            onInspectCard={card => setInspectedCard(card)}
+            onSaveP1Deck={cards => {
+              setCustomP1Deck(cards);
+            }}
+            onSaveP2Deck={cards => {
+              setCustomP2Deck(cards);
+            }}
+            onTestBattle={cards => {
+              setCustomP1Deck(cards);
+              handleStartNewDuel(gameMode, cards, customP2Deck);
+            }}
+          />
+        )}
+
+        {activeTab === 'almanac' && (
+          <CardAlmanac onInspectCard={card => setInspectedCard(card)} />
+        )}
+
+        {activeTab === 'lore' && <RulesCodex />}
+      </main>
+
+      {/* Local Couch Co-Op Privacy Handover Modal */}
+      <PrivacyCurtainModal
+        isOpen={gameState.isPrivacyCurtainActive}
+        playerName={gameState.players[gameState.currentTurn - 1].name}
+        onRevealAndStart={() => setGameState(s => revealPrivacyAndStartTurn(s))}
+      />
+
+      {/* High Definition Card Inspector Modal */}
+      <CardInspectorModal
+        card={inspectedCard}
+        onClose={() => setInspectedCard(null)}
+      />
+
+      {/* Victory / Defeat Game Over Modal */}
+      <GameOverModal
+        gameState={gameState}
+        onRematch={() => handleStartNewDuel()}
+        onDeckBuilder={() => {
+          setGameState(s => ({ ...s, winner: null }));
+          setActiveTab('deckbuilder');
+        }}
+      />
+    </div>
   );
 }

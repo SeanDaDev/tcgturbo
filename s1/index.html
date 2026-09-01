@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="TCG Turbo - Next-Generation Hybrid Trading Card Game featuring 3D holographic foils, local couch co-op with privacy shield, and tactical ascension mechanics.">
+  <title>TCG Turbo | Next-Gen Web TCG</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/card.css">
+  <link rel="stylesheet" href="css/battlefield.css">
+  <link rel="stylesheet" href="css/deckbuilder.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+
+  <!-- Ambient Cosmic Background Canvas -->
+  <div class="bg-canvas-container">
+    <div class="cosmic-nebula"></div>
+    <div class="starfield"></div>
+  </div>
+
+  <!-- Combat Dynamic Targeting Arrow Canvas -->
+  <canvas id="combat-arrow-canvas" class="combat-arrow-canvas"></canvas>
+
+  <div id="app">
+    <!-- Top Header Navigation -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="game-logo-gem"></div>
+        <div class="brand-title-wrap">
+          <h1 class="brand-title">TCG Turbo</h1>
+          <span class="brand-subtitle">Tactical Conduit & Ascension TCG</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" aria-label="Main Navigation">
+        <button class="nav-tab-btn active" data-view="battle-view" id="nav-tab-battle">
+          <span>⚔️</span> Battle Arena
+        </button>
+        <button class="nav-tab-btn" data-view="deckbuilder-view" id="nav-tab-deckbuilder">
+          <span>🃏</span> Deck Builder
+        </button>
+        <button class="nav-tab-btn" data-view="almanac-view" id="nav-tab-almanac">
+          <span>✨</span> 3D Showcase
+        </button>
+        <button class="nav-tab-btn" data-view="lore-view" id="nav-tab-lore">
+          <span>📜</span> Rules & Lore
+        </button>
+      </nav>
+
+      <!-- Header Utilities -->
+      <div class="header-actions">
+        <!-- 20 Title Customizer Dropdown -->
+        <select id="title-switcher-select" class="title-select" title="Switch Game Title Theme"></select>
+
+        <button id="btn-sound-toggle" class="action-icon-btn active-sound" title="Toggle Sound (M)">🔊</button>
+        <button id="btn-fullscreen" class="action-icon-btn" title="Toggle Fullscreen (F)">⛶</button>
+      </div>
+    </header>
+
+    <!-- ==========================================================================
+         VIEW 1: BATTLE ARENA (LOCAL 2P COUCH CO-OP & SOLO VS AI)
+         ========================================================================== -->
+    <main id="battle-view" class="view-container active battle-arena-view">
+      <!-- Arena Sub-Header -->
+      <div class="arena-topbar">
+        <div class="match-info-pill">
+          <span id="arena-mode-badge" class="mode-badge">Local 2P Couch Duel</span>
+          <span id="arena-turn-badge" class="turn-indicator-badge">Player 1's Turn</span>
+          <span id="arena-round-badge">Round 1</span>
+        </div>
+
+        <div class="phase-tracker">
+          <span class="phase-step active" id="phase-step-main">Main Phase</span>
+          <span class="phase-step" id="phase-step-battle">Combat Ready</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <select id="match-mode-select" class="title-select">
+            <option value="couch_2p" selected>👥 Local 2P Couch Co-op</option>
+            <option value="solo_ai">🤖 Solo vs AI Tactician</option>
+          </select>
+          <button id="btn-new-match" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;">New Duel</button>
+        </div>
+      </div>
+
+      <!-- Live Battle Action Log -->
+      <div id="battle-log-pane" class="battle-log-pane"></div>
+
+      <!-- Duel Mat Board -->
+      <div class="duel-mat">
+        <div class="mat-center-divider"></div>
+
+        <!-- OPPONENT ZONE (PLAYER 2 / AI) -->
+        <div class="player-mat-zone opponent-zone">
+          <div class="mat-row">
+            <!-- Opponent Vanguard Hero Box -->
+            <div id="p2-vanguard-box" class="vanguard-box" title="Click with active creature to declare direct attack">
+              <div class="vanguard-avatar">
+                <img id="p2-vanguard-avatar" src="assets/cards/card_valkyrie.jpg" alt="Opponent Avatar" class="vanguard-avatar-img">
+              </div>
+              <div class="vanguard-info">
+                <div id="p2-vanguard-name" class="vanguard-name">Player 2 (Lady Nyx)</div>
+                <div class="vanguard-hp-bar-wrap">
+                  <div id="p2-hp-fill" class="vanguard-hp-fill" style="width: 100%;"></div>
+                  <div id="p2-hp-text" class="vanguard-hp-text">30 / 30 HP</div>
+                </div>
+              </div>
+              <button id="p2-hero-power-btn" class="hero-power-btn" disabled>
+                <span>⚡</span>
+                <span class="hero-power-cost">2</span>
+              </button>
+            </div>
+
+            <!-- Opponent Wards (Secret Face-Down Slots) -->
+            <div class="wards-container" id="p2-wards"></div>
+
+            <!-- Opponent Aether Meter & Piles -->
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <div class="aether-meter-wrap">
+                <span class="aether-count-text" id="p2-aether-count">1 / 1</span>
+                <div class="aether-crystals-row" id="p2-aether-gems"></div>
+              </div>
+              <div class="piles-group">
+                <div class="card-pile" title="Opponent Deck">
+                  <span>DECK</span>
+                  <span id="p2-deck-count" class="pile-count-badge">14</span>
+                </div>
+                <div class="card-pile" title="Opponent Graveyard">
+                  <span>GRAVE</span>
+                  <span id="p2-grave-count" class="pile-count-badge">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Opponent Hand -->
+          <div class="hand-container opponent-hand" id="p2-hand"></div>
+
+          <!-- Opponent Lanes -->
+          <div class="lanes-container" id="p2-lanes"></div>
+        </div>
+
+        <!-- ACTIVE PLAYER ZONE (PLAYER 1) -->
+        <div class="player-mat-zone active-player-zone">
+          <!-- Player 1 Lanes -->
+          <div class="lanes-container" id="p1-lanes"></div>
+
+          <!-- Player 1 Hand -->
+          <div class="hand-container player-hand" id="p1-hand"></div>
+
+          <div class="mat-row">
+            <!-- Player 1 Vanguard Hero Box -->
+            <div id="p1-vanguard-box" class="vanguard-box active-turn">
+              <div class="vanguard-avatar">
+                <img id="p1-vanguard-avatar" src="assets/cards/card_ignis.jpg" alt="Player 1 Avatar" class="vanguard-avatar-img">
+              </div>
+              <div class="vanguard-info">
+                <div id="p1-vanguard-name" class="vanguard-name">Player 1 (Sol Invictus)</div>
+                <div class="vanguard-hp-bar-wrap">
+                  <div id="p1-hp-fill" class="vanguard-hp-fill" style="width: 100%;"></div>
+                  <div id="p1-hp-text" class="vanguard-hp-text">30 / 30 HP</div>
+                </div>
+              </div>
+              <button id="p1-hero-power-btn" class="hero-power-btn" title="Hero Power: Solar Flare">
+                <span>⚡</span>
+                <span class="hero-power-cost">2</span>
+              </button>
+            </div>
+
+            <!-- Player 1 Wards -->
+            <div class="wards-container" id="p1-wards"></div>
+
+            <!-- Player 1 Aether Meter & End Turn Action -->
+            <div style="display: flex; gap: 14px; align-items: center;">
+              <div class="aether-meter-wrap">
+                <span class="aether-count-text" id="p1-aether-count">1 / 1</span>
+                <div class="aether-crystals-row" id="p1-aether-gems"></div>
+              </div>
+              <div class="piles-group">
+                <div class="card-pile" title="Your Deck">
+                  <span>DECK</span>
+                  <span id="p1-deck-count" class="pile-count-badge">14</span>
+                </div>
+                <div class="card-pile" title="Your Graveyard">
+                  <span>GRAVE</span>
+                  <span id="p1-grave-count" class="pile-count-badge">0</span>
+                </div>
+              </div>
+              <div class="battle-actions-bar">
+                <button id="btn-end-turn" class="btn-end-turn">End Turn (Space)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ==========================================================================
+         VIEW 2: DECK BUILDER & CUSTOMIZER
+         ========================================================================== -->
+    <section id="deckbuilder-view" class="view-container deckbuilder-view">
+      <!-- Card Library Matrix -->
+      <div class="library-pane">
+        <div class="library-filter-bar">
+          <div class="filter-group">
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">ELEMENT:</span>
+            <button class="filter-chip active" data-filter-group="element" data-filter="all">All</button>
+            <button class="filter-chip" data-filter-group="element" data-filter="solar">Solar</button>
+            <button class="filter-chip" data-filter-group="element" data-filter="void">Void</button>
+            <button class="filter-chip" data-filter-group="element" data-filter="verdant">Verdant</button>
+            <button class="filter-chip" data-filter-group="element" data-filter="tide">Tide</button>
+            <button class="filter-chip" data-filter-group="element" data-filter="astral">Astral</button>
+          </div>
+
+          <div class="filter-group">
+            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">TYPE:</span>
+            <button class="filter-chip active" data-filter-group="type" data-filter="all">All</button>
+            <button class="filter-chip" data-filter-group="type" data-filter="creature">Creatures</button>
+            <button class="filter-chip" data-filter-group="type" data-filter="spell">Spells</button>
+            <button class="filter-chip" data-filter-group="type" data-filter="ward">Wards</button>
+          </div>
+
+          <input type="text" id="deck-search-input" class="search-input" placeholder="Search cards..." />
+        </div>
+
+        <!-- Cards Catalog Grid -->
+        <div id="deck-catalog-grid" class="card-catalog-scroll"></div>
+      </div>
+
+      <!-- Active Deck Drawer -->
+      <aside class="deck-drawer-pane">
+        <div class="drawer-header">
+          <div class="drawer-title-row">
+            <input type="text" id="deck-name-input" class="deck-name-input" value="Custom Astral Deck" />
+            <span id="deck-count-badge" class="deck-count-pill">0 / 14 cards</span>
+          </div>
+
+          <!-- Archetype Presets Loader -->
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <label for="deck-preset-select" style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">PRESET:</label>
+            <select id="deck-preset-select" class="title-select" style="flex: 1;">
+              <option value="solar_pyre">Solar Flare Aggro</option>
+              <option value="void_shadow">Void Eclipse Control</option>
+              <option value="verdant_ramp">Verdant Overgrowth Ramp</option>
+              <option value="tide_astral">Tidal Chrono Combo</option>
+            </select>
+          </div>
+
+          <!-- Dynamic Mana Curve Graph -->
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 0.68rem; font-family: var(--font-mono); color: var(--text-muted);">AETHER CURVE:</span>
+            <div id="deck-mana-curve" class="mana-curve-container"></div>
+          </div>
+        </div>
+
+        <!-- Deck Items List -->
+        <div id="deck-cards-list" class="deck-card-list"></div>
+
+        <!-- Drawer Action Footer -->
+        <div class="drawer-footer">
+          <div class="drawer-actions-row">
+            <button id="btn-save-p1-deck" class="btn btn-primary" style="flex: 1; font-size: 0.8rem; padding: 8px 12px;">Set Player 1 Deck</button>
+            <button id="btn-save-p2-deck" class="btn btn-gold" style="flex: 1; font-size: 0.8rem; padding: 8px 12px;">Set Player 2 Deck</button>
+          </div>
+          <button id="btn-clear-deck" class="btn btn-outline" style="font-size: 0.75rem; padding: 6px;">Clear Deck</button>
+        </div>
+      </aside>
+    </section>
+
+    <!-- ==========================================================================
+         VIEW 3: 3D HOLOGRAPHIC CARD SHOWCASE & ALMANAC
+         ========================================================================== -->
+    <section id="almanac-view" class="view-container almanac-view">
+      <div style="display: flex; flex-direction: column; width: 100%; gap: 1.5rem; overflow-y: auto;">
+        <div class="codex-hero-banner">
+          <h2 class="codex-title">✨ Holographic Card Almanac</h2>
+          <p class="codex-text">
+            Hover and tilt cards with your cursor to engage interactive 3D parallax lighting and dynamic foil shaders.
+            Right-click or click any card for full high-definition inspection and lore archives.
+          </p>
+        </div>
+        <div id="almanac-cards-grid" class="card-catalog-scroll" style="padding-bottom: 3rem;"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         VIEW 4: RULES & LORE CODEX
+         ========================================================================== -->
+    <section id="lore-view" class="view-container lore-view">
+      <div class="codex-hero-banner">
+        <h2 class="codex-title">📜 Official Rulebook & Nexus Codex</h2>
+        <p class="codex-text">
+          Welcome to the comprehensive rulebook. Our game fuses the deepest strategic foundations of 
+          <strong>Magic: The Gathering</strong> (resource curves & phases), <strong>Yu-Gi-Oh!</strong> (lane combat & facedown traps), 
+          <strong>Hearthstone</strong> (Vanguard heroes & dynamic minion clashes), and <strong>Pokémon</strong> (creature evolution & burst forms) 
+          into a cohesive, standalone tactical card game.
+        </p>
+      </div>
+
+      <!-- SECTION 1: OBJECT & SETUP -->
+      <div class="codex-section">
+        <h3 class="codex-heading">🎯 1. Objective of the Game & Match Setup</h3>
+        <p class="codex-text">
+          Each player commands a <strong>Vanguard Champion</strong> starting with <strong>30 Health (HP)</strong>. Your objective is to reduce the enemy Vanguard to <strong>0 HP</strong> through tactical creature summons, in-place ascensions, direct attacks, and lethal arcane spells.
+        </p>
+        <div class="codex-step-list">
+          <div class="codex-step-item">
+            <span class="codex-step-num">01</span>
+            <div>
+              <strong style="color: #fff;">Deck Construction:</strong>
+              <p class="codex-text">Standard decks consist of 14 to 20 cards. You can include up to 3 copies of any individual card. Choose 1 Vanguard Champion whose passive identity and activated Hero Power fit your strategy.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">02</span>
+            <div>
+              <strong style="color: #fff;">Starting Hand & Hand Limit:</strong>
+              <p class="codex-text">Both players begin the duel by drawing <strong>4 cards</strong>. Maximum hand size is <strong>8 cards</strong>. Any card drawn while your hand has 8 cards is immediately burned into your Graveyard.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">03</span>
+            <div>
+              <strong style="color: #fff;">Fatigue Rule:</strong>
+              <p class="codex-text">If you attempt to draw a card when your deck is empty (0 cards remaining), your Vanguard takes <strong>2 Fatigue damage</strong> per draw.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: THE 4 TURN PHASES -->
+      <div class="codex-section">
+        <h3 class="codex-heading">⏳ 2. Turn Structure & Step Flow</h3>
+        <p class="codex-text">
+          Turns alternate sequentially between Player 1 and Player 2 (or AI). Every turn follows a rigid four-step cycle:
+        </p>
+
+        <div class="codex-step-list">
+          <div class="codex-step-item">
+            <span class="codex-step-num">P1</span>
+            <div>
+              <strong style="color: #60a5fa;">Phase 1: Aether Surge & Draw Step</strong>
+              <p class="codex-text">
+                • <strong>Max Aether Growth:</strong> Max Aether increases by +1 each round up to a maximum cap of 10.<br>
+                • <strong>Full Replenish:</strong> Current Aether refills to 100% of your Max Aether.<br>
+                • <strong>Draw:</strong> Automatically draw 1 card from your deck.<br>
+                • <strong>Awaken:</strong> All friendly non-frozen creatures on the battlefield become ready to attack. Any unit frozen from the prior turn thaws out.
+              </p>
+            </div>
+          </div>
+
+          <div class="codex-step-item">
+            <span class="codex-step-num">P2</span>
+            <div>
+              <strong style="color: #fde047;">Phase 2: Main Action Phase</strong>
+              <p class="codex-text">
+                Spend your available Aether in any order to perform actions:<br>
+                • <strong>Summon Form I Initiates:</strong> Place a Form I creature onto any of your 5 battlefield lanes.<br>
+                • <strong>In-Place Ascension:</strong> Play a Form II or Form III creature over an existing ally on the field (see Ascension rules below).<br>
+                • <strong>Cast Spells:</strong> Activate instant damage, card draws, heals, or mass freeze spells.<br>
+                • <strong>Set Secret Wards:</strong> Place facedown reactive trap runes in your 3 Ward slots (Cost: 2 Aether).<br>
+                • <strong>Hero Power (Surge):</strong> Pay 2 Aether to activate your Vanguard's unique ability (once per turn).
+              </p>
+            </div>
+          </div>
+
+          <div class="codex-step-item">
+            <span class="codex-step-num">P3</span>
+            <div>
+              <strong style="color: #f87171;">Phase 3: Combat / Battle Phase</strong>
+              <p class="codex-text">
+                • Click on any ready creature (highlighted with a pulsing green glow) to engage the targeting laser.<br>
+                • Target an enemy creature in any lane, OR click the enemy Vanguard's portrait for a direct strike.<br>
+                • Combat damage is <strong>simultaneous</strong>: both the attacking unit and defending unit deal their ATK value to each other's HP!
+              </p>
+            </div>
+          </div>
+
+          <div class="codex-step-item">
+            <span class="codex-step-num">P4</span>
+            <div>
+              <strong style="color: #c084fc;">Phase 4: End Turn & Couch Co-Op Handover</strong>
+              <p class="codex-text">
+                • Click <strong>End Turn</strong> (or press <kbd>Space</kbd>).<br>
+                • In Local 2-Player Couch Co-op, the <strong>Privacy Shield Curtain</strong> immediately obscures the board so Player 1 can pass the keyboard/mouse to Player 2 without exposing secret wards or hand cards!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: THE ASCENSION SYSTEM -->
+      <div class="codex-section">
+        <h3 class="codex-heading">🧬 3. In-Place Ascension & Evolution Engine</h3>
+        <p class="codex-text">
+          Ascension is the core mechanic that allows low-cost units to transform into titanic game-ending avatars:
+        </p>
+        <div class="codex-mechanic-card">
+          <strong>The Ascension Discount Formula</strong>
+          <p class="codex-text">
+            When you summon a Form II or Form III creature <em>directly into an empty lane</em>, you pay its full printed Aether cost.<br>
+            However, when you <strong>Ascend</strong> it by dropping it directly onto an active friendly creature of the same element in a lane, you receive a discount:
+            <br><code style="color: #fde047; font-family: var(--font-mono); background: #000; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-top: 4px;">Actual Cost = Max(1, Printed Cost - (Base Form Level × 2))</code>
+          </p>
+        </div>
+        <div class="codex-mechanic-card">
+          <strong>Ascension Rush & Ascension Bursts</strong>
+          <p class="codex-text">
+            • <strong>Instant Attack:</strong> Unlike freshly summoned units that have summoning sickness, an Ascended unit can attack immediately on the turn it ascends!<br>
+            • <strong>Ascension Burst:</strong> Triggers an exclusive ultimate ability. For example: <em>Ignis, Astral Sovereign</em> deals 3 AoE damage to all enemy units upon ascension; <em>Tethys</em> draws 2 cards and freezes the entire enemy board.
+          </p>
+        </div>
+      </div>
+
+      <!-- SECTION 4: KEYWORDS & COMBAT RULES -->
+      <div class="codex-section">
+        <h3 class="codex-heading">⚡ 4. Keyword Glossary & Combat Mechanics</h3>
+        <table class="codex-table">
+          <thead>
+            <tr>
+              <th>Keyword</th>
+              <th>Effect Description</th>
+              <th>Example Card</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color: #fde047; font-weight: 800;">[Taunt]</td>
+              <td>Enemies MUST attack this unit before they can attack other friendly creatures or declare direct strikes on your Vanguard.</td>
+              <td>Moss Sprite, Yggdrasil Ancient</td>
+            </tr>
+            <tr>
+              <td style="color: #facc15; font-weight: 800;">[Aegis]</td>
+              <td>Divine energy shield. Completely absorbs and negates the next instance of damage, then breaks.</td>
+              <td>Pyre Vanguard, Chronos</td>
+            </tr>
+            <tr>
+              <td style="color: #f87171; font-weight: 800;">[Rush]</td>
+              <td>Can attack enemy creatures or the Vanguard immediately on the turn it is summoned.</td>
+              <td>Nyx Valkyrie, Ignis Apex</td>
+            </tr>
+            <tr>
+              <td style="color: #c084fc; font-weight: 800;">[Lifesteal]</td>
+              <td>Whenever this creature deals damage, it restores an equal amount of HP to your Vanguard Champion.</td>
+              <td>Nyx Eclipse Valkyrie, Dreadlord</td>
+            </tr>
+            <tr>
+              <td style="color: #38bdf8; font-weight: 800;">[Freeze]</td>
+              <td>Frozen units cannot declare attacks on their next turn. Thaws at the start of the following turn.</td>
+              <td>Coral Nymph, Abyssal Deluge</td>
+            </tr>
+            <tr>
+              <td style="color: #4ade80; font-weight: 800;">[Deathrattle]</td>
+              <td>Triggers an automatic effect when this creature is destroyed and sent to the Graveyard.</td>
+              <td>Voidling Assassin (Draws 1 Card)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SECTION 5: SECRET WARDS (TRAPS) -->
+      <div class="codex-section">
+        <h3 class="codex-heading">👁️ 5. Secret Wards & Trap Timing Rules</h3>
+        <p class="codex-text">
+          Wards are placed facedown in your 3 Rune slots for 2 Aether. Opponents only see a glowing runic seal. Wards automatically trigger and resolve on the stack when specific trigger conditions occur:
+        </p>
+        <div class="codex-step-list">
+          <div class="codex-step-item">
+            <span class="codex-step-num">☀️</span>
+            <div>
+              <strong style="color: #ff9d00;">Sunfire Sigil (Solar)</strong>
+              <p class="codex-text"><em>Trigger:</em> When your Vanguard is attacked directly.<br><em>Effect:</em> Deals 4 retaliatory damage to the attacking unit before damage resolves.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">🌑</span>
+            <div>
+              <strong style="color: #c084fc;">Shadow Mirror Ward (Void)</strong>
+              <p class="codex-text"><em>Trigger:</em> When an opponent Ascends a Form II or Form III Apex monster.<br><em>Effect:</em> Siphons the titan's strength, reducing its ATK to 1.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">🌿</span>
+            <div>
+              <strong style="color: #10b981;">Thornsnare Ward (Verdant)</strong>
+              <p class="codex-text"><em>Trigger:</em> When an enemy creature declares an attack.<br><em>Effect:</em> Instantly destroys the attacker if it has 3 or less remaining HP.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">🌊</span>
+            <div>
+              <strong style="color: #00d2ff;">Glacial Stasis Ward (Tide)</strong>
+              <p class="codex-text"><em>Trigger:</em> When an enemy declares a direct strike on your Vanguard.<br><em>Effect:</em> Completely negates the incoming attack and Freezes the attacker.</p>
+            </div>
+          </div>
+          <div class="codex-step-item">
+            <span class="codex-step-num">✨</span>
+            <div>
+              <strong style="color: #f43f5e;">Continuum Collapse Ward (Astral)</strong>
+              <p class="codex-text"><em>Trigger:</em> When your Vanguard would take fatal lethal damage.<br><em>Effect:</em> Prevents death, locks Vanguard HP at 1, and draws 2 emergency cards.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 6: THE 5 VANGUARD CHAMPIONS -->
+      <div class="codex-section">
+        <h3 class="codex-heading">👑 6. The 5 Vanguard Champions & Hero Powers</h3>
+        <p class="codex-text">
+          Every Vanguard Champion has 30 HP and a 2-Aether Hero Power (Surge) that can be activated once per turn:
+        </p>
+        <table class="codex-table">
+          <thead>
+            <tr>
+              <th>Champion</th>
+              <th>Element</th>
+              <th>Hero Power</th>
+              <th>Cost & Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color: #fff; font-weight: 700;">Sol Invictus</td>
+              <td style="color: #ff9d00;">Solar / Pyre</td>
+              <td>Solar Flare</td>
+              <td><strong>(2 Aether)</strong> Deal 2 direct damage to enemy Vanguard or a minion.</td>
+            </tr>
+            <tr>
+              <td style="color: #fff; font-weight: 700;">Lady Nyx</td>
+              <td style="color: #c084fc;">Void / Shadow</td>
+              <td>Shadow Infusion</td>
+              <td><strong>(2 Aether)</strong> Give a friendly unit +2 ATK this turn.</td>
+            </tr>
+            <tr>
+              <td style="color: #fff; font-weight: 700;">Yggdra Heartwarden</td>
+              <td style="color: #10b981;">Verdant / Nature</td>
+              <td>Living Growth</td>
+              <td><strong>(2 Aether)</strong> Restore 3 HP to your Vanguard or a friendly minion.</td>
+            </tr>
+            <tr>
+              <td style="color: #fff; font-weight: 700;">Empress Tethys</td>
+              <td style="color: #00d2ff;">Tide / Water</td>
+              <td>Ocean Ward</td>
+              <td><strong>(2 Aether)</strong> Grant a friendly creature an Aegis shield.</td>
+            </tr>
+            <tr>
+              <td style="color: #fff; font-weight: 700;">Grand Chronomancer</td>
+              <td style="color: #f43f5e;">Astral / Time</td>
+              <td>Time Surge</td>
+              <td><strong>(2 Aether)</strong> Gain +1 temporary Aether and draw 1 card.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ==========================================================================
+       TURN HANDOVER PRIVACY CURTAIN MODAL (COUCH CO-OP)
+       ========================================================================== -->
+  <div id="privacy-curtain-modal" class="privacy-curtain-modal">
+    <div class="privacy-card">
+      <div class="privacy-lock-icon">🔒</div>
+      <h2 class="privacy-title">Player 2's Turn</h2>
+      <p class="privacy-subtitle">Information hidden for fairness. Hand, secret wards, and tactical plans are concealed. Please pass the device to the next player.</p>
+      <div class="privacy-badge">✦ LOCAL COUCH CO-OP PRIVACY SHIELD ✦</div>
+      <div class="privacy-actions">
+        <button id="privacy-ready-btn" class="btn btn-primary privacy-ready-btn">I am Player 2 — Reveal Hand & Begin Turn</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       CARD INSPECTOR MODAL
+       ========================================================================== -->
+  <div id="card-inspector-modal" class="card-inspector-modal">
+    <div class="inspector-content">
+      <button id="inspector-close-btn" class="inspector-close-btn" title="Close (Esc)">✕</button>
+      <div class="inspector-card-view"></div>
+      <div class="inspector-details">
+        <div class="inspector-header">
+          <h2 class="inspector-card-name">Card Name</h2>
+          <div class="inspector-meta">Element | Cost | Rarity</div>
+        </div>
+        <div class="inspector-lore">"Lore quote..."</div>
+        <div class="inspector-ability-block">
+          <span class="inspector-ability-title">Abilities & Mechanics:</span>
+          <p class="inspector-ability-desc">Ability description text.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       VICTORY / DEFEAT GAME OVER MODAL
+       ========================================================================== -->
+  <div id="gameover-modal" class="gameover-modal">
+    <div class="gameover-box">
+      <h2 class="gameover-title victory">VICTORY</h2>
+      <p class="gameover-desc">The Astral Nexus acknowledges the superior Vanguard.</p>
+      <button id="btn-play-again" class="btn btn-gold" style="padding: 14px 32px; font-size: 1.1rem;">Play Again</button>
+    </div>
+  </div>
+
+  <!-- JavaScript Modules in Dependency Order -->
+  <script src="js/soundEngine.js"></script>
+  <script src="js/cardsData.js"></script>
+  <script src="js/cardComponent.js"></script>
+  <script src="js/gameState.js"></script>
+  <script src="js/aiPlayer.js"></script>
+  <script src="js/battleUI.js"></script>
+  <script src="js/deckBuilderUI.js"></script>
+  <script src="js/loreCodexUI.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

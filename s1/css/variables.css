@@ -1,0 +1,92 @@
+/* ==========================================================================
+   AETHERBOUND TCG - DESIGN SYSTEM & THEME TOKENS
+   ========================================================================== */
+
+:root {
+  /* Core Theme Colors */
+  --bg-primary: #0a0b12;
+  --bg-secondary: #111424;
+  --bg-surface: #171b30;
+  --bg-surface-elevated: #1f243f;
+  --bg-glass: rgba(18, 22, 40, 0.75);
+  --bg-glass-heavy: rgba(12, 15, 29, 0.92);
+  --bg-glass-card: rgba(26, 31, 56, 0.85);
+
+  /* Borders & Accents */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(147, 197, 253, 0.25);
+  --border-gold: linear-gradient(135deg, #ffd700, #ffae00, #b8860b);
+  --border-mythic: linear-gradient(135deg, #ff007a, #7928ca, #0070f3);
+
+  /* Element Themes */
+  --color-solar: #ff9d00;
+  --glow-solar: rgba(255, 157, 0, 0.6);
+  --bg-solar-gradient: linear-gradient(135deg, #ff9d00, #ff4500, #800020);
+
+  --color-void: #b34eff;
+  --glow-void: rgba(179, 78, 255, 0.6);
+  --bg-void-gradient: linear-gradient(135deg, #8a2be2, #4b0082, #180033);
+
+  --color-verdant: #10b981;
+  --glow-verdant: rgba(16, 185, 129, 0.6);
+  --bg-verdant-gradient: linear-gradient(135deg, #10b981, #047857, #064e3b);
+
+  --color-tide: #00d2ff;
+  --glow-tide: rgba(0, 210, 255, 0.6);
+  --bg-tide-gradient: linear-gradient(135deg, #00d2ff, #0066cc, #001a4d);
+
+  --color-astral: #f43f5e;
+  --glow-astral: rgba(244, 63, 94, 0.6);
+  --bg-astral-gradient: linear-gradient(135deg, #ec4899, #8b5cf6, #3b82f6);
+
+  /* Rarity Colors */
+  --rarity-common: #94a3b8;
+  --rarity-rare: #38bdf8;
+  --rarity-epic: #c084fc;
+  --rarity-legendary: #fbbf24;
+
+  /* Text Colors */
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-accent: #38bdf8;
+  --text-gold: #fde047;
+
+  /* Status Colors */
+  --color-health: #ef4444;
+  --color-attack: #f59e0b;
+  --color-aether: #3b82f6;
+  --color-aegis: #eab308;
+  --color-trap: #a855f7;
+
+  /* Typography */
+  --font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Dimensions & Spacing */
+  --card-width: 145px;
+  --card-height: 205px;
+  --card-radius: 12px;
+  --board-max-width: 1400px;
+
+  /* Foil Lighting Defaults */
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+  --card-opacity: 0;
+  --card-rx: 0deg;
+  --card-ry: 0deg;
+
+  /* Shadows & Depth */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.8);
+  --shadow-glow-cyan: 0 0 25px rgba(0, 210, 255, 0.4);
+  --shadow-glow-gold: 0 0 25px rgba(251, 191, 36, 0.45);
+  --shadow-glow-void: 0 0 25px rgba(179, 78, 255, 0.45);
+
+  /* Transitions */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}

@@ -1,0 +1,147 @@
+/* ==========================================================================
+   AETHERBOUND TCG - COMBAT & VISUAL ANIMATIONS
+   ========================================================================== */
+
+/* Damage & Heal Floating Combat Text */
+.combat-fct {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 900;
+  pointer-events: none;
+  z-index: 500;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.9), 0 2px 4px #000;
+  animation: fctFloat 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+
+.fct-damage {
+  color: #ff3344;
+  text-shadow: 0 0 15px rgba(255, 51, 68, 0.8);
+}
+
+.fct-heal {
+  color: #10b981;
+  text-shadow: 0 0 15px rgba(16, 185, 129, 0.8);
+}
+
+.fct-ascend {
+  color: #ffd700;
+  font-size: 1.8rem;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.9);
+}
+
+@keyframes fctFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.4);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -30px) scale(1.3);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -55px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -85px) scale(0.8);
+  }
+}
+
+/* Screen Shake Effect */
+.screen-shake-sm {
+  animation: shakeSm 0.3s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+.screen-shake-lg {
+  animation: shakeLg 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shakeSm {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+  40%, 60% { transform: translate3d(3px, 0, 0); }
+}
+
+@keyframes shakeLg {
+  10%, 90% { transform: translate3d(-4px, -2px, 0); }
+  20%, 80% { transform: translate3d(6px, 4px, 0); }
+  30%, 50%, 70% { transform: translate3d(-8px, -4px, 0); }
+  40%, 60% { transform: translate3d(8px, 4px, 0); }
+}
+
+/* Summon Portal Flash */
+.summon-portal-burst {
+  position: absolute;
+  inset: -15px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.8) 0%, rgba(139, 92, 246, 0.5) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 40;
+  animation: portalExpand 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes portalExpand {
+  0% { transform: scale(0.2) rotate(0deg); opacity: 0; }
+  40% { opacity: 1; transform: scale(1.3) rotate(90deg); }
+  100% { transform: scale(1.6) rotate(180deg); opacity: 0; }
+}
+
+/* Card Attack Thrust Animation */
+.card-thrust-top {
+  animation: thrustTop 0.4s ease-in-out;
+}
+
+.card-thrust-bottom {
+  animation: thrustBottom 0.4s ease-in-out;
+}
+
+@keyframes thrustTop {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(35px) scale(1.08); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes thrustBottom {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-35px) scale(1.08); }
+  100% { transform: translateY(0); }
+}
+
+/* Card Draw Slide In */
+.card-drawn {
+  animation: cardDrawIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardDrawIn {
+  from {
+    opacity: 0;
+    transform: translateY(60px) scale(0.6) rotate(-10deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+/* Trap / Ward Reveal Burst */
+.ward-reveal-burst {
+  position: absolute;
+  inset: -20px;
+  border-radius: 12px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.9) 0%, rgba(236, 72, 153, 0.6) 50%, transparent 80%);
+  pointer-events: none;
+  z-index: 50;
+  animation: wardBurst 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes wardBurst {
+  0% { transform: scale(0.5); opacity: 0; }
+  30% { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}

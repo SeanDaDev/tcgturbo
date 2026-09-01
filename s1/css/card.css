@@ -1,0 +1,452 @@
+/* ==========================================================================
+   AETHERBOUND TCG - 3D HOLOGRAPHIC CARD SYSTEM & SHADERS
+   ========================================================================== */
+
+.card-wrapper {
+  perspective: 1200px;
+  display: inline-block;
+  user-select: none;
+  touch-action: none;
+}
+
+.card {
+  position: relative;
+  width: var(--card-width);
+  height: var(--card-height);
+  border-radius: var(--card-radius);
+  background: #121422;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--card-rx, 0deg)) rotateY(var(--card-ry, 0deg));
+  transition: transform 0.15s ease-out, box-shadow 0.25s ease;
+  cursor: grab;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+.card:hover {
+  z-index: 50;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 20px var(--glow-current, rgba(59, 130, 246, 0.4));
+}
+
+/* Card Front & Inner Layers */
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, #1e2238 0%, #0d0e1a 100%);
+  transform-style: preserve-3d;
+}
+
+/* Holographic Foil Shading Overlay */
+.card-foil {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  pointer-events: none;
+  z-index: 10;
+  opacity: var(--card-opacity, 0);
+  background: radial-gradient(
+    circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 0, 128, 0.2) 25%,
+    rgba(0, 210, 255, 0.2) 50%,
+    transparent 80%
+  );
+  mix-blend-mode: color-dodge;
+  transition: opacity 0.2s ease;
+}
+
+.card-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  pointer-events: none;
+  z-index: 11;
+  opacity: var(--card-opacity, 0);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.15) 100%
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Elemental Borders & Card Themes */
+.card[data-element="solar"] {
+  --glow-current: var(--glow-solar);
+  border-color: rgba(255, 157, 0, 0.5);
+}
+.card[data-element="solar"] .card-frame-header {
+  background: var(--bg-solar-gradient);
+}
+
+.card[data-element="void"] {
+  --glow-current: var(--glow-void);
+  border-color: rgba(179, 78, 255, 0.5);
+}
+.card[data-element="void"] .card-frame-header {
+  background: var(--bg-void-gradient);
+}
+
+.card[data-element="verdant"] {
+  --glow-current: var(--glow-verdant);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+.card[data-element="verdant"] .card-frame-header {
+  background: var(--bg-verdant-gradient);
+}
+
+.card[data-element="tide"] {
+  --glow-current: var(--glow-tide);
+  border-color: rgba(0, 210, 255, 0.5);
+}
+.card[data-element="tide"] .card-frame-header {
+  background: var(--bg-tide-gradient);
+}
+
+.card[data-element="astral"] {
+  --glow-current: var(--glow-astral);
+  border-color: rgba(244, 63, 94, 0.5);
+}
+.card[data-element="astral"] .card-frame-header {
+  background: var(--bg-astral-gradient);
+}
+
+/* Card Header (Cost, Name, Form Badge) */
+.card-frame-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  min-height: 26px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  position: relative;
+  z-index: 2;
+}
+
+.card-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+  letter-spacing: 0.5px;
+}
+
+.card-cost-gem {
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border: 1.5px solid #93c5fd;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* Card Art Frame */
+.card-art-box {
+  position: relative;
+  width: 100%;
+  height: 98px;
+  background: #090a14;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-inspect-btn {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(10, 15, 30, 0.85);
+  border: 1px solid rgba(147, 197, 253, 0.4);
+  color: #fff;
+  font-size: 0.62rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+}
+
+.card-inspect-btn:hover {
+  background: var(--color-aether);
+  border-color: #fff;
+  transform: scale(1.2);
+}
+
+.card-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  transition: transform 0.3s ease;
+}
+
+.card:hover .card-art-img {
+  transform: scale(1.06);
+}
+
+.card-form-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--rarity-legendary);
+  color: var(--rarity-legendary);
+  font-size: 0.55rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.card-type-tag {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.55rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+/* Card Text / Ability Box */
+.card-text-box {
+  flex: 1;
+  padding: 5px 6px;
+  background: rgba(10, 12, 22, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 0.62rem;
+  line-height: 1.35;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 2;
+}
+
+.card-keyword {
+  font-weight: 800;
+  color: var(--text-gold);
+}
+
+/* Card Bottom Stats Bar (ATK & HP) */
+.card-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: #090a12;
+  position: relative;
+  z-index: 2;
+}
+
+.card-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-stat-atk {
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  border: 1px solid #fde047;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.card-stat-hp {
+  background: linear-gradient(135deg, #ef4444, #991b1b);
+  border: 1px solid #fca5a5;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.card-stat-hp.damaged {
+  color: #fca5a5;
+  animation: hpPulse 1s infinite alternate;
+}
+
+.card-stat-hp.buffed {
+  color: #86efac;
+}
+
+@keyframes hpPulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
+}
+
+.card-rarity-gem {
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  background: var(--rarity-common);
+  box-shadow: 0 0 4px var(--rarity-common);
+}
+
+.card[data-rarity="legendary"] .card-rarity-gem {
+  background: var(--rarity-legendary);
+  box-shadow: 0 0 8px var(--rarity-legendary);
+}
+.card[data-rarity="epic"] .card-rarity-gem {
+  background: var(--rarity-epic);
+  box-shadow: 0 0 8px var(--rarity-epic);
+}
+.card[data-rarity="rare"] .card-rarity-gem {
+  background: var(--rarity-rare);
+  box-shadow: 0 0 8px var(--rarity-rare);
+}
+
+/* ==========================================================================
+   FACEDOWN CARD (WARDRUNES / OPPONENT HAND / DECK)
+   ========================================================================== */
+.card.card-back {
+  background: #0d0f1e;
+  border: 2px solid #2d3748;
+}
+
+.card-back-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #090a14 100%);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.card-back-mandala {
+  width: 70px;
+  height: 70px;
+  border: 2px dashed rgba(167, 139, 250, 0.4);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: mandalaSpin 20s linear infinite;
+}
+
+@keyframes mandalaSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.card-back-symbol {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #a855f7, #3b82f6);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.8);
+}
+
+/* Spell Cards Styling (No ATK/HP) */
+.card[data-type="spell"] .card-stats-bar,
+.card[data-type="ward"] .card-stats-bar {
+  justify-content: center;
+}
+
+.card[data-type="spell"] .card-spell-label,
+.card[data-type="ward"] .card-spell-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.card[data-type="spell"] .card-spell-label {
+  color: var(--color-aether);
+}
+
+.card[data-type="ward"] .card-spell-label {
+  color: var(--color-trap);
+}
+
+/* Status States on Board */
+.card.ready-to-attack {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.7) !important;
+  animation: readyPulse 2s infinite ease-in-out;
+}
+
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.5); }
+  50% { box-shadow: 0 0 24px rgba(34, 197, 94, 0.9); }
+}
+
+.card.exhausted {
+  filter: brightness(0.65) grayscale(0.3);
+}
+
+.card.valid-target {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.8) !important;
+  cursor: crosshair;
+}
+
+.card.ascension-candidate {
+  border-color: #ffd700 !important;
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.9) !important;
+  animation: ascensionGlow 1.2s infinite alternate;
+}
+
+@keyframes ascensionGlow {
+  0% { transform: scale(1); filter: drop-shadow(0 0 6px #ffd700); }
+  100% { transform: scale(1.05); filter: drop-shadow(0 0 16px #ffd700); }
+}
+
+.card.has-aegis::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: calc(var(--card-radius) + 4px);
+  border: 2px solid #facc15;
+  box-shadow: 0 0 15px rgba(250, 204, 21, 0.6);
+  pointer-events: none;
+  animation: aegisRotate 6s linear infinite;
+}
+
+@keyframes aegisRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

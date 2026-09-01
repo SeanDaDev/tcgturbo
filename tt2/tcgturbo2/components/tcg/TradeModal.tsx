@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { CARDS_DATA } from '@/lib/tcg/cardsData';
 import { PlayerCollection, tradeOrGiftCard } from '@/lib/tcg/collectionEngine';
 import { Card } from './Card';
-import { Gift, ShieldCheck, X, Check, RefreshCw } from 'lucide-react';
+import { Gift, ShieldCheck, X } from 'lucide-react';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 
 interface TradeModalProps {

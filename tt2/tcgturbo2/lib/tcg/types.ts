@@ -110,3 +110,35 @@ export interface GameState {
   actionLogs: ActionLog[];
   floatingTexts: FloatingCombatText[];
 }
+
+export type CosmeticType = 'card_back' | 'avatar_border' | 'board_theme' | 'foil_style';
+
+export interface CosmeticItem {
+  id: string;
+  name: string;
+  type: CosmeticType;
+  rarity: Rarity;
+  priceGems: number;
+  priceUSD: number;
+  desc: string;
+  previewColor: string;
+  assetUrl?: string;
+  badge?: string;
+}
+
+export interface CurrencyPackage {
+  id: string;
+  name: string;
+  gems: number;
+  bonusGems: number;
+  priceUSD: number;
+  badge?: string;
+  popular?: boolean;
+}
+
+export interface EquippedCosmetics {
+  cardBack: string;
+  avatarBorder: string;
+  boardTheme: string;
+  foilStyle: string;
+}

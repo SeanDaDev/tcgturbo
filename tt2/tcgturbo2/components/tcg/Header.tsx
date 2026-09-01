@@ -2,23 +2,24 @@
 
 import React from 'react';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
-import { GameMode } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
-import { Volume2, VolumeX, Maximize, Swords, BookOpen, Layers, Sparkles } from 'lucide-react';
+import { getSupporterTier } from '@/lib/tcg/collectionEngine';
+import { Volume2, VolumeX, Maximize, Swords, BookOpen, Layers, Sparkles, User } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'battle' | 'deckbuilder' | 'almanac' | 'lore';
   setActiveTab: (tab: 'battle' | 'deckbuilder' | 'almanac' | 'lore') => void;
   gameTitle: string;
   setGameTitle: (title: string) => void;
-  gameMode: GameMode;
-  setGameMode: (mode: GameMode) => void;
   isMuted: boolean;
   setIsMuted: (muted: boolean) => void;
-  onNewMatch: () => void;
   unopenedPacks?: number;
+  gemBalance?: number;
+  totalSpentUSD?: number;
   onOpenPackModal?: () => void;
   onOpenTradeModal?: () => void;
+  onOpenShopModal?: () => void;
+  onOpenProfileModal?: () => void;
 }
 
 export function Header({
@@ -26,15 +27,17 @@ export function Header({
   setActiveTab,
   gameTitle,
   setGameTitle,
-  gameMode,
-  setGameMode,
   isMuted,
   setIsMuted,
-  onNewMatch,
   unopenedPacks = 0,
+  gemBalance = 10000,
+  totalSpentUSD = 0,
   onOpenPackModal,
-  onOpenTradeModal
+  onOpenTradeModal,
+  onOpenShopModal,
+  onOpenProfileModal
 }: HeaderProps) {
+  const supporterTier = getSupporterTier(totalSpentUSD);
   const toggleSound = () => {
     const unmuted = soundEngine.toggleMute();
     setIsMuted(!unmuted);
@@ -129,15 +132,44 @@ export function Header({
 
       {/* Action Utilities & Progression Features */}
       <div className="header-actions flex items-center gap-2 md:gap-3">
+        {onOpenProfileModal && (
+          <button
+            type="button"
+            onClick={onOpenProfileModal}
+            className={`btn bg-slate-950 border ${supporterTier.borderColor} ${supporterTier.color} px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform`}
+            title={`View Player Profile & Supporter Status (${supporterTier.name} - $${totalSpentUSD.toFixed(2)} contributed)`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Profile</span>
+            <span className="bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded-md font-extrabold text-[10px]">
+              {supporterTier.badge.split(' ')[0]} ${totalSpentUSD.toFixed(2)}
+            </span>
+          </button>
+        )}
+
+        {onOpenShopModal && (
+          <button
+            type="button"
+            onClick={onOpenShopModal}
+            className="btn bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-lg hover:scale-105 transition-transform"
+            title="Open Cosmetic Store & Gem Vault ($100.00 Credit Pre-loaded)"
+          >
+            <span>🛍️ Shop</span>
+            <span className="bg-slate-950 text-amber-300 px-1.5 py-0.5 rounded-md font-extrabold text-[10px]">
+              💎 {gemBalance.toLocaleString()} (${(gemBalance / 100).toFixed(0)})
+            </span>
+          </button>
+        )}
+
         {onOpenPackModal && (
           <button
             type="button"
             onClick={onOpenPackModal}
-            className="btn bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-lg hover:scale-105 transition-transform"
+            className="btn bg-slate-900 border border-amber-500/60 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 hover:bg-slate-800 transition-colors"
             title="Open Booster Packs"
           >
             <span>🎁 Packs</span>
-            <span className="bg-slate-950 text-amber-300 px-1.5 py-0.2 rounded-md font-extrabold text-[10px]">
+            <span className="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-md font-extrabold text-[10px]">
               {unopenedPacks}
             </span>
           </button>
@@ -147,7 +179,7 @@ export function Header({
           <button
             type="button"
             onClick={onOpenTradeModal}
-            className="btn bg-purple-950/80 border border-purple-500/50 text-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono flex items-center gap-1.5 hover:bg-purple-900/80 transition-colors"
+            className="btn bg-purple-950/80 border border-purple-500/50 text-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold font-mono flex items-center gap-1.5 hover:bg-purple-900/80 transition-colors hidden sm:flex"
             title="Free Card Gifting & Trading ($0.00)"
           >
             <span>🔄 Trade</span>

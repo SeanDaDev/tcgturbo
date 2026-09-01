@@ -21,6 +21,8 @@ interface CardProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   discountAmount?: number;
+  equippedCardBack?: string;
+  equippedFoilStyle?: string;
 }
 
 export function Card({
@@ -38,7 +40,9 @@ export function Card({
   onDragStart,
   className = '',
   size = 'md',
-  discountAmount = 0
+  discountAmount = 0,
+  equippedCardBack = 'card_back_default',
+  equippedFoilStyle = 'foil_style_default'
 }: CardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [rx, setRx] = useState(0);
@@ -81,6 +85,7 @@ export function Card({
       <div className={`card-wrapper select-none ${className}`}>
         <div
           className={`card card-back size-${size} relative overflow-hidden flex items-center justify-center`}
+          data-card-back={equippedCardBack}
           onClick={onClick}
         >
           <div className="card-back-inner">
@@ -128,6 +133,7 @@ export function Card({
         data-element={card.element}
         data-rarity={card.rarity}
         data-type={card.type}
+        data-foil-style={equippedFoilStyle}
         style={
           {
             '--card-rx': `${rx.toFixed(2)}deg`,
@@ -154,7 +160,7 @@ export function Card({
       >
         <div className="card-inner">
           {/* Holographic foil & glare dynamic shaders */}
-          <div className="card-foil" />
+          <div className={`card-foil foil-${equippedFoilStyle}`} />
           <div className="card-glare" />
 
           {/* Header */}

@@ -23,6 +23,8 @@ import { soundEngine } from '@/lib/tcg/soundEngine';
 
 import { PackOpenerModal } from '@/components/tcg/PackOpenerModal';
 import { TradeModal } from '@/components/tcg/TradeModal';
+import { CosmeticsShopModal } from '@/components/tcg/CosmeticsShopModal';
+import { PlayerProfileModal } from '@/components/tcg/PlayerProfileModal';
 import {
   PlayerCollection,
   loadPlayerCollection,
@@ -42,6 +44,8 @@ export default function Home() {
   );
   const [isPackModalOpen, setIsPackModalOpen] = useState<boolean>(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState<boolean>(false);
+  const [isShopModalOpen, setIsShopModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   const [customP1Deck, setCustomP1Deck] = useState<string[] | undefined>(undefined);
   const [customP2Deck, setCustomP2Deck] = useState<string[] | undefined>(undefined);
@@ -64,10 +68,22 @@ export default function Home() {
     [gameMode, customP1Deck, customP2Deck]
   );
 
+  const handleSwitchGameMode = useCallback(
+    (mode: GameMode) => {
+      setGameMode(mode);
+      handleStartNewDuel(mode);
+    },
+    [handleStartNewDuel]
+  );
+
   // Victory Reward listener
+  const rewardedRef = useRef<boolean>(false);
   useEffect(() => {
-    if (gameState.winner === 1) {
+    if (gameState.winner === 1 && !rewardedRef.current) {
+      rewardedRef.current = true;
       setCollection(current => addVictoryPackReward(current));
+    } else if (gameState.winner === null) {
+      rewardedRef.current = false;
     }
   }, [gameState.winner]);
 
@@ -97,8 +113,11 @@ export default function Home() {
         return;
       }
 
-      // Space to end turn or pass privacy curtain
+      // Space to end turn or pass privacy curtain (only when in battle tab and no modal active)
       if (e.code === 'Space') {
+        if (isPackModalOpen || isTradeModalOpen || isShopModalOpen || isProfileModalOpen || inspectedCard || activeTab !== 'battle') {
+          return;
+        }
         e.preventDefault();
         setGameState(current => {
           if (current.winner) return current;
@@ -120,7 +139,7 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isPackModalOpen, isTradeModalOpen, isShopModalOpen, isProfileModalOpen, inspectedCard, activeTab]);
 
   return (
     <div id="app" className="relative flex flex-col min-h-screen w-full bg-[#080911] text-slate-100 overflow-x-hidden">
@@ -133,17 +152,15 @@ export default function Home() {
         setActiveTab={setActiveTab}
         gameTitle={gameTitle}
         setGameTitle={setGameTitle}
-        gameMode={gameMode}
-        setGameMode={mode => {
-          setGameMode(mode);
-          handleStartNewDuel(mode);
-        }}
         isMuted={isMuted}
         setIsMuted={setIsMuted}
-        onNewMatch={() => handleStartNewDuel()}
         unopenedPacks={collection.unopenedPacks}
+        gemBalance={collection.gemBalance}
+        totalSpentUSD={collection.totalSpentUSD}
         onOpenPackModal={() => setIsPackModalOpen(true)}
         onOpenTradeModal={() => setIsTradeModalOpen(true)}
+        onOpenShopModal={() => setIsShopModalOpen(true)}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main View Container */}
@@ -153,7 +170,9 @@ export default function Home() {
             gameState={gameState}
             setGameState={setGameState}
             onInspectCard={card => setInspectedCard(card)}
-            onNewDuel={() => handleStartNewDuel()}
+            onNewDuel={() => handleSwitchGameMode(gameMode)}
+            equippedCosmetics={collection.equippedCosmetics}
+            totalSpentUSD={collection.totalSpentUSD}
           />
         )}
 
@@ -211,6 +230,22 @@ export default function Home() {
         collection={collection}
         onUpdateCollection={updated => setCollection(updated)}
         onClose={() => setIsTradeModalOpen(false)}
+      />
+
+      {/* Real-Money Cosmetics Shop & Gem Exchange Modal */}
+      <CosmeticsShopModal
+        isOpen={isShopModalOpen}
+        collection={collection}
+        onUpdateCollection={updated => setCollection(updated)}
+        onClose={() => setIsShopModalOpen(false)}
+      />
+
+      {/* Player Profile & Supporter Status Modal */}
+      <PlayerProfileModal
+        isOpen={isProfileModalOpen}
+        collection={collection}
+        onOpenShop={() => setIsShopModalOpen(true)}
+        onClose={() => setIsProfileModalOpen(false)}
       />
 
       {/* Victory / Defeat Game Over Modal */}

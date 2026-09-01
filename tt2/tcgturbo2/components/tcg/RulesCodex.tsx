@@ -305,9 +305,11 @@ export function RulesCodex() {
             <strong>100% Free-to-Play Entertainment Software:</strong> TCG Turbo is operated strictly as a non-gambling, free-to-play video game. Under United States federal and state laws (including UIGEA, FTC Gaming Guidelines, and COPPA):
           </p>
           <ul className="list-disc pl-5 space-y-1.5 text-slate-400">
-            <li><strong>Zero Monetary Value ($0.00 USD):</strong> All cards, booster packs, stardust, and avatars are virtual game items with zero real-world monetary value and cannot be exchanged or redeemed for fiat currency.</li>
-            <li><strong>No Real-Money Purchases / No Loot Box Microtransactions:</strong> Booster packs cannot be bought with real money; they are unlocked exclusively by winning duels or reaching gameplay milestones.</li>
-            <li><strong>Free Peer-to-Peer Trading:</strong> Card gifting and trading between players is 100% free with no financial transactions or secondary market valuations permitted.</li>
+            <li><strong>100% Cosmetic-Only Purchases:</strong> Real-money purchases are restricted exclusively to visual cosmetics (Card Backs, Avatar Frames, Arena Skins, and Foil Sheens). No cards, stats, or competitive gameplay advantages can be bought.</li>
+            <li><strong>$100 Starting Credit:</strong> Every player receives $100 worth of pre-loaded virtual Cosmetic Currency (10,000 Astral Gems) upon initial launch.</li>
+            <li><strong>Zero Cash Cashout Value ($0.00 USD):</strong> All virtual gems and cosmetic items are non-exchangeable for fiat currency and carry zero real-world cash value.</li>
+            <li><strong>No Gameplay Microtransactions / No Pay-to-Win:</strong> Booster packs cannot be purchased with real money or gems; cards are unlocked exclusively through duel gameplay.</li>
+            <li><strong>Free Peer-to-Peer Trading:</strong> Card gifting and duplicate card transfers between players remain 100% free with no cash transactions permitted.</li>
           </ul>
         </div>
       </section>

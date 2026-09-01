@@ -39,6 +39,7 @@ export async function executeAiTurn(
         if (boardUnit && boardUnit.form) {
           const ascensionCard = ai.hand.find(c => {
             if (c.type !== 'creature' || !c.form || c.form <= boardUnit.form!) return false;
+            if (c.ascendsFrom && c.ascendsFrom !== boardUnit.element) return false;
             const cost = calculateAscensionCost(c, boardUnit);
             return cost <= ai.mana;
           });
@@ -113,6 +114,11 @@ export async function executeAiTurn(
     for (const attacker of readyAttackers) {
       const currentState = getGameState();
       if (currentState.winner || currentState.currentTurn !== 2) break;
+
+      const liveAttacker = currentState.players[1].board.find(
+        c => c && c.instanceId === attacker.instanceId && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
+      );
+      if (!liveAttacker) continue;
 
       const opp = currentState.players[0];
       const tauntBlockers = opp.board

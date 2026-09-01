@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Card } from './Card';
 import { CARDS_DATA } from '@/lib/tcg/cardsData';
 import { PRESET_DECKS } from '@/lib/tcg/presetDecks';
-import { CardDef, CardInstance, ElementType, CardType } from '@/lib/tcg/types';
+import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { Search, Plus, Trash2, Swords, CheckCircle2 } from 'lucide-react';
 
@@ -312,6 +312,11 @@ export function DeckBuilder({
             <button
               type="button"
               onClick={() => {
+                if (currentDeck.length < 10) {
+                  showFeedbackToast('⚠️ Deck requires at least 10 cards!');
+                  soundEngine.playTrap();
+                  return;
+                }
                 onSaveP1Deck(currentDeck);
                 showFeedbackToast('Deck saved as Player 1 Loadout!');
               }}
@@ -322,6 +327,11 @@ export function DeckBuilder({
             <button
               type="button"
               onClick={() => {
+                if (currentDeck.length < 10) {
+                  showFeedbackToast('⚠️ Deck requires at least 10 cards!');
+                  soundEngine.playTrap();
+                  return;
+                }
                 onSaveP2Deck(currentDeck);
                 showFeedbackToast('Deck saved as Player 2 Loadout!');
               }}
@@ -334,7 +344,14 @@ export function DeckBuilder({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => onTestBattle(currentDeck)}
+              onClick={() => {
+                if (currentDeck.length < 10) {
+                  showFeedbackToast('⚠️ Deck requires at least 10 cards!');
+                  soundEngine.playTrap();
+                  return;
+                }
+                onTestBattle(currentDeck);
+              }}
               className="btn bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-500 hover:to-teal-500 flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
             >
               <Swords className="w-3.5 h-3.5 text-emerald-200" />

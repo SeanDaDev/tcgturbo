@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { Card } from './Card';
-import { GameState, CardDef, CardInstance, GameMode } from '@/lib/tcg/types';
+import { GameState, CardDef, CardInstance, EquippedCosmetics } from '@/lib/tcg/types';
 import {
   playCard,
   declareAttack,
@@ -12,6 +12,7 @@ import {
   calculateAscensionCost
 } from '@/lib/tcg/gameEngine';
 import { soundEngine } from '@/lib/tcg/soundEngine';
+import { getSupporterTier } from '@/lib/tcg/collectionEngine';
 import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw } from 'lucide-react';
 
 interface BattleArenaProps {
@@ -19,13 +20,17 @@ interface BattleArenaProps {
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   onInspectCard: (card: CardDef | CardInstance) => void;
   onNewDuel: () => void;
+  equippedCosmetics?: EquippedCosmetics;
+  totalSpentUSD?: number;
 }
 
 export function BattleArena({
   gameState,
   setGameState,
   onInspectCard,
-  onNewDuel
+  onNewDuel,
+  equippedCosmetics,
+  totalSpentUSD = 0
 }: BattleArenaProps) {
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
@@ -71,7 +76,6 @@ export function BattleArena({
 
     if (!selectedAttackerId) return;
 
-    const attackerEl = document.querySelector(`[data-id] .ready-to-attack, [data-id] .active-attacker`);
     // Find the specific card element
     const matchingCard = document.querySelector(`.card.active-attacker`);
     if (!matchingCard) return;
@@ -186,10 +190,10 @@ export function BattleArena({
   const oppTaunters = opponentPlayer.board.filter(c => c && c.hasTaunt);
 
   // Safe Mana & MaxMana getters to prevent NaN in active sessions
-  const p1Mana = gameState.players[0].mana ?? (gameState.players[0] as any).aether ?? 1;
-  const p1MaxMana = gameState.players[0].maxMana ?? (gameState.players[0] as any).maxAether ?? 1;
-  const p2Mana = gameState.players[1].mana ?? (gameState.players[1] as any).aether ?? 1;
-  const p2MaxMana = gameState.players[1].maxMana ?? (gameState.players[1] as any).maxAether ?? 1;
+  const p1Mana = gameState.players[0].mana ?? 1;
+  const p1MaxMana = gameState.players[0].maxMana ?? 1;
+  const p2Mana = gameState.players[1].mana ?? 1;
+  const p2MaxMana = gameState.players[1].maxMana ?? 1;
 
   return (
     <div
@@ -358,6 +362,8 @@ export function BattleArena({
                     isFaceDown={hideCards}
                     size="sm"
                     onInspect={onInspectCard}
+                    equippedCardBack={equippedCosmetics?.cardBack}
+                    equippedFoilStyle={equippedCosmetics?.foilStyle}
                     onClick={() => {
                       if (!hideCards) handleCardClick(card, 2);
                     }}
@@ -481,6 +487,8 @@ export function BattleArena({
                     card={card}
                     isFaceDown={false}
                     draggable={isPlayer1Turn}
+                    equippedCardBack={equippedCosmetics?.cardBack}
+                    equippedFoilStyle={equippedCosmetics?.foilStyle}
                     onDragStart={() => {
                       setDraggedCardId(card.instanceId);
                       setSelectedHandCardId(card.instanceId);
@@ -515,7 +523,17 @@ export function BattleArena({
 
               <div className="vanguard-info flex flex-col flex-1 gap-1">
                 <div className="vanguard-name text-xs md:text-sm font-bold text-slate-100 font-serif flex items-center justify-between">
-                  <span>{gameState.players[0].name}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>{gameState.players[0].name}</span>
+                    {totalSpentUSD > 0 && (
+                      <span
+                        className={`text-[9px] font-mono font-black px-1.5 py-0.2 rounded border ${getSupporterTier(totalSpentUSD).borderColor} ${getSupporterTier(totalSpentUSD).color} bg-slate-950`}
+                        title={getSupporterTier(totalSpentUSD).name}
+                      >
+                        {getSupporterTier(totalSpentUSD).badge.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-amber-400 font-mono">({gameState.players[0].vanguard.name})</span>
                 </div>
                 <div className="vanguard-hp-bar-wrap w-full h-3 bg-rose-950/80 rounded-full overflow-hidden border border-rose-800/50 relative">

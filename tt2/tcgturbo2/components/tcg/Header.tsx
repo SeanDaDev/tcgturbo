@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
@@ -55,7 +56,7 @@ export function Header({
   return (
     <header className="app-header flex flex-wrap items-center justify-between px-4 md:px-8 py-2.5 sticky top-0 z-50 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/80 shadow-2xl gap-3">
       {/* Brand */}
-      <div className="brand-section flex items-center gap-3">
+      <Link href="/" className="brand-section flex items-center gap-3 hover:opacity-90 transition-opacity">
         <div className="game-logo-gem" />
         <div className="brand-title-wrap">
           <h1 className="brand-title text-xl md:text-2xl font-black tracking-wider uppercase bg-gradient-to-r from-amber-200 via-sky-300 to-indigo-300 bg-clip-text text-transparent font-serif">
@@ -65,7 +66,7 @@ export function Header({
             Tactical Conduit & Ascension TCG
           </span>
         </div>
-      </div>
+      </Link>
 
       {/* Nav Tabs */}
       <nav className="nav-tabs flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1.5" aria-label="Main Navigation">

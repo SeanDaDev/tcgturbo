@@ -268,6 +268,8 @@ export function BattleArena({
                   src={gameState.players[1].vanguard.avatar}
                   alt={gameState.players[1].vanguard.name}
                   fill
+                  sizes="48px"
+                  priority
                   className="object-cover"
                 />
               </div>
@@ -517,6 +519,8 @@ export function BattleArena({
                   src={gameState.players[0].vanguard.avatar}
                   alt={gameState.players[0].vanguard.name}
                   fill
+                  sizes="48px"
+                  priority
                   className="object-cover"
                 />
               </div>

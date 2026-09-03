@@ -12,16 +12,18 @@ export function RulesCodex() {
           <BookOpen className="w-4 h-4 text-amber-400" />
           Official Rulebook & Astral Lore Archives
         </div>
-        <h2 className="codex-title text-2xl md:text-3xl font-black font-serif uppercase tracking-wider bg-gradient-to-r from-amber-200 via-sky-200 to-purple-300 bg-clip-text text-transparent mb-3">
-          📜 Official Rulebook & Nexus Codex
+        <div className="codex-intro flex flex-col gap-2 border-b border-slate-800 pb-6">
+        <h2 className="text-2xl md:text-3xl font-black font-serif text-white">
+          The Living Rules Codex & Tactical Manual
         </h2>
-        <p className="codex-text text-slate-300 text-sm md:text-base leading-relaxed">
-          Welcome to the official rules compendium. TCG Turbo fuses the strategic foundations of{' '}
-          <strong className="text-sky-300">Magic: The Gathering</strong> (mana curves & turn phases),{' '}
+        <p className="text-slate-300 text-sm leading-relaxed max-w-3xl">
+          TCG Turbo 2 is built on the philosophy of intuitive mechanical simplicity with a towering strategic ceiling. It weaves the greatest design strengths of{' '}
+          <strong className="text-sky-300">Magic: The Gathering Commander</strong> (Champion Commanders & Command Zone powers),{' '}
           <strong className="text-purple-300">Yu-Gi-Oh!</strong> (lane combat & facedown trap wards),{' '}
-          <strong className="text-amber-300">Hearthstone</strong> (Vanguard heroes & direct minion trades), and{' '}
+          <strong className="text-amber-300">Hearthstone</strong> (clean mana curves & direct unit trades), and{' '}
           <strong className="text-emerald-300">Pokémon</strong> (in-place creature ascension evolution) into a fast-paced, standalone tactical card game.
         </p>
+      </div>
       </div>
 
       {/* SECTION 1: OBJECTIVE & MATCH SETUP */}
@@ -31,7 +33,7 @@ export function RulesCodex() {
           1. Objective of the Game & Match Setup
         </h3>
         <p className="codex-text text-slate-300 text-sm leading-relaxed">
-          Each player commands a <strong className="text-white">Vanguard Champion</strong> starting with <strong className="text-rose-400">30 Health (HP)</strong>. Your primary objective is to reduce the enemy Vanguard to <strong className="text-rose-400">0 HP</strong> through tactical creature summons, in-place ascensions, direct attacks, and lethal arcane spells.
+          Each player commands a legendary <strong className="text-white">Champion Commander</strong> starting with <strong className="text-rose-400">30 Health (HP)</strong>. Your primary objective is to reduce the enemy Champion Commander to <strong className="text-rose-400">0 HP</strong> through tactical creature summons, in-place evolutions, direct attacks, and lethal arcane spells.
         </p>
 
         <div className="codex-step-list flex flex-col gap-3">
@@ -40,7 +42,7 @@ export function RulesCodex() {
             <div className="text-xs md:text-sm">
               <strong className="text-white block mb-1">Deck Construction:</strong>
               <p className="text-slate-400">
-                Standard decks consist of 14 to 20 cards. You can include up to 3 copies of any individual card. Choose 1 Vanguard Champion whose passive identity and activated Hero Power fit your strategy.
+                Standard decks consist of 14 to 20 cards. You can include up to 3 copies of any individual card. Choose 1 Champion Commander whose elemental color identity and activated Commander Power fit your strategy.
               </p>
             </div>
           </div>
@@ -60,7 +62,7 @@ export function RulesCodex() {
             <div className="text-xs md:text-sm">
               <strong className="text-white block mb-1">Fatigue Rule:</strong>
               <p className="text-slate-400">
-                If you attempt to draw a card when your deck is empty (0 cards remaining), your Vanguard takes <strong className="text-rose-400">2 Fatigue damage</strong> per draw.
+                If you attempt to draw a card when your deck is empty (0 cards remaining), your Champion Commander takes <strong className="text-rose-400">2 Fatigue damage</strong> per draw.
               </p>
             </div>
           </div>
@@ -74,7 +76,7 @@ export function RulesCodex() {
           2. Turn Structure & Step Flow
         </h3>
         <p className="codex-text text-slate-300 text-sm leading-relaxed">
-          Turns alternate sequentially between Player 1 and Player 2 (or AI). Every turn follows a rigid four-step cycle:
+          Turns alternate sequentially between Player 1 and Player 2 (or AI). During your turn, you can summon, evolve, and attack in any order you choose:
         </p>
 
         <div className="flex flex-col gap-3">
@@ -89,14 +91,15 @@ export function RulesCodex() {
           </div>
 
           <div className="bg-slate-950/60 p-4 rounded-xl border-l-4 border-yellow-400 text-xs md:text-sm">
-            <strong className="text-yellow-300 block font-bold mb-1">Phase 2: Main Action Phase</strong>
+            <strong className="text-yellow-300 block font-bold mb-1">Phase 2: Main Action & Combat Phase</strong>
             <p className="text-slate-400 leading-relaxed">
-              Spend your available Mana in any order to perform actions:<br />
+              Spend your available Mana and declare attacks in any order you like:<br />
               • <strong>Summon Form I Initiates:</strong> Place a Form I creature onto any of your 5 battlefield lanes.<br />
-              • <strong>In-Place Ascension:</strong> Play a Form II or Form III creature over an existing ally on the field.<br />
+              • <strong>In-Place Evolution:</strong> Play a higher-cost creature of the same element onto an existing ally for a discount equal to the difference in cost.<br />
               • <strong>Cast Spells:</strong> Activate instant damage, card draws, heals, or mass freeze spells.<br />
               • <strong>Set Secret Wards:</strong> Place facedown reactive trap runes in your 3 Ward slots (Cost: 2 Mana).<br />
-              • <strong>Hero Power (Surge):</strong> Pay 2 Mana to activate your Vanguard&apos;s unique ability (once per turn).
+              • <strong>Commander Power (Surge):</strong> Pay 2 Mana to activate your Champion Commander&apos;s unique ability (once per turn).<br />
+              • <strong>Declare Attacks:</strong> Click any ready creature (pulsing green glow) and target an enemy creature or the enemy Champion Commander directly!
             </p>
           </div>
 
@@ -130,13 +133,16 @@ export function RulesCodex() {
         </p>
 
         <div className="bg-slate-950/80 border-l-4 border-amber-400 p-4 rounded-r-xl">
-          <strong className="text-amber-300 text-sm md:text-base block mb-2">The Ascension Discount Formula</strong>
+          <strong className="text-amber-300 text-sm md:text-base block mb-2">The Intuitive Evolution Discount Formula</strong>
           <p className="text-slate-300 text-xs md:text-sm leading-relaxed mb-2">
-            When you summon a Form II or Form III creature <em>into an empty lane</em>, you pay its full printed Mana cost. However, when you <strong>Ascend</strong> it by dropping it directly onto an active friendly creature of the same element in a lane, you receive a discount:
+            When you summon a creature <em>into an empty lane</em>, you pay its printed Mana cost. However, when you <strong>Evolve (Ascend)</strong> it by dropping it onto a friendly creature of the same element in a lane, you simply pay the difference in Mana cost:
           </p>
           <code className="bg-slate-900 text-yellow-300 px-3 py-1.5 rounded-lg font-mono text-xs font-bold inline-block border border-slate-800">
-            Actual Cost = Max(1, Printed Cost - (Base Form Level × 2))
+            Actual Cost = Max(1, New Creature Cost - Base Creature Cost)
           </code>
+          <p className="text-slate-400 text-xs mt-2">
+            <em>Example:</em> Dropping 7-Mana Ignis onto a 1-Mana Drake costs only 6 Mana. Dropping Ignis onto a 4-Mana Pyre Vanguard costs only 3 Mana! The field dynamically highlights valid evolution targets with a golden EVOLVE badge.
+          </p>
         </div>
 
         <div className="bg-slate-950/80 border-l-4 border-sky-400 p-4 rounded-r-xl">
@@ -167,22 +173,22 @@ export function RulesCodex() {
             <tbody className="divide-y divide-slate-800/60">
               <tr>
                 <td className="p-3 text-amber-300 font-bold font-mono">[Taunt]</td>
-                <td className="p-3 text-slate-300">Enemies MUST attack this unit before they can attack other friendly creatures or declare direct strikes on your Vanguard.</td>
+                <td className="p-3 text-slate-300">Enemies MUST attack this unit before they can attack other friendly creatures or declare direct strikes on your Champion Commander.</td>
                 <td className="p-3 text-slate-400">Moss Sprite, Yggdrasil Ancient</td>
               </tr>
               <tr>
                 <td className="p-3 text-yellow-400 font-bold font-mono">[Aegis]</td>
                 <td className="p-3 text-slate-300">Divine energy shield. Completely absorbs and negates the next instance of damage, then breaks.</td>
-                <td className="p-3 text-slate-400">Pyre Vanguard, Chronos</td>
+                <td className="p-3 text-slate-400">Pyre Paladin, Chronos</td>
               </tr>
               <tr>
                 <td className="p-3 text-rose-400 font-bold font-mono">[Rush]</td>
-                <td className="p-3 text-slate-300">Can attack enemy creatures or the Vanguard immediately on the turn it is summoned.</td>
+                <td className="p-3 text-slate-300">Can attack enemy creatures or the Champion Commander immediately on the turn it is summoned.</td>
                 <td className="p-3 text-slate-400">Nyx Valkyrie, Ignis Apex</td>
               </tr>
               <tr>
                 <td className="p-3 text-purple-400 font-bold font-mono">[Lifesteal]</td>
-                <td className="p-3 text-slate-300">Whenever this creature deals damage, it restores an equal amount of HP to your Vanguard Champion.</td>
+                <td className="p-3 text-slate-300">Whenever this creature deals damage, it restores an equal amount of HP to your Champion Commander.</td>
                 <td className="p-3 text-slate-400">Nyx Eclipse Valkyrie, Dreadlord</td>
               </tr>
               <tr>

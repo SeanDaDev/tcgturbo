@@ -54,24 +54,24 @@ export function Header({
   };
 
   return (
-    <header className="app-header flex flex-wrap items-center justify-between px-4 md:px-8 py-2.5 sticky top-0 z-50 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/80 shadow-2xl gap-3">
+    <header className="app-header flex flex-wrap items-center justify-between px-2.5 sm:px-4 md:px-8 py-2 sticky top-0 z-50 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800/80 shadow-2xl gap-2">
       {/* Brand */}
-      <Link href="/" className="brand-section flex items-center gap-3 hover:opacity-90 transition-opacity">
-        <div className="game-logo-gem" />
+      <Link href="/" className="brand-section flex items-center gap-2 sm:gap-3 hover:opacity-90 transition-opacity">
+        <div className="game-logo-gem flex-shrink-0" />
         <div className="brand-title-wrap">
-          <h1 className="brand-title text-xl md:text-2xl font-black tracking-wider uppercase bg-gradient-to-r from-amber-200 via-sky-300 to-indigo-300 bg-clip-text text-transparent font-serif">
+          <h1 className="brand-title text-base sm:text-xl md:text-2xl font-black tracking-wider uppercase bg-gradient-to-r from-amber-200 via-sky-300 to-indigo-300 bg-clip-text text-transparent font-serif truncate max-w-[140px] sm:max-w-none">
             {gameTitle}
           </h1>
-          <span className="brand-subtitle text-[11px] text-slate-400 font-mono tracking-widest uppercase font-semibold">
+          <span className="brand-subtitle hidden sm:inline-block text-[10px] text-slate-400 font-mono tracking-widest uppercase font-semibold">
             Tactical Conduit & Ascension TCG
           </span>
         </div>
       </Link>
 
-      {/* Nav Tabs */}
-      <nav className="nav-tabs flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1.5" aria-label="Main Navigation">
+      {/* Nav Tabs (Scrollable on small mobile screens) */}
+      <nav className="nav-tabs flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 gap-1 overflow-x-auto max-w-full" aria-label="Main Navigation">
         <button
-          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
             activeTab === 'battle'
               ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -81,12 +81,12 @@ export function Header({
             soundEngine.playHover();
           }}
         >
-          <Swords className="w-4 h-4 text-amber-400" />
+          <Swords className="w-3.5 h-3.5 text-amber-400" />
           <span>Battle Arena</span>
         </button>
 
         <button
-          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
             activeTab === 'deckbuilder'
               ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -96,12 +96,12 @@ export function Header({
             soundEngine.playHover();
           }}
         >
-          <Layers className="w-4 h-4 text-emerald-400" />
+          <Layers className="w-3.5 h-3.5 text-emerald-400" />
           <span>Deck Builder</span>
         </button>
 
         <button
-          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
             activeTab === 'almanac'
               ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -111,12 +111,12 @@ export function Header({
             soundEngine.playHover();
           }}
         >
-          <Sparkles className="w-4 h-4 text-purple-400" />
+          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
           <span>3D Showcase</span>
         </button>
 
         <button
-          className={`nav-tab-btn px-3.5 md:px-5 py-2 rounded-lg text-xs md:text-sm font-bold flex items-center gap-2 transition-all ${
+          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
             activeTab === 'lore'
               ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -126,7 +126,7 @@ export function Header({
             soundEngine.playHover();
           }}
         >
-          <BookOpen className="w-4 h-4 text-amber-300" />
+          <BookOpen className="w-3.5 h-3.5 text-amber-300" />
           <span>Rules & Lore</span>
         </button>
       </nav>

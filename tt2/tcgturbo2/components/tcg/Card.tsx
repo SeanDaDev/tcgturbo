@@ -19,10 +19,11 @@ interface CardProps {
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   discountAmount?: number;
   equippedCardBack?: string;
   equippedFoilStyle?: string;
+  isPlayable?: boolean;
 }
 
 export function Card({
@@ -32,6 +33,7 @@ export function Card({
   isSelectedAttacker = false,
   isValidTarget = false,
   isAscensionCandidate = false,
+  isPlayable = false,
   onClick,
   onDoubleClick,
   onContextMenu,
@@ -128,7 +130,7 @@ export function Card({
           isSelectedAttacker ? 'active-attacker' : ''
         } ${isValidTarget ? 'valid-target' : ''} ${
           isAscensionCandidate ? 'ascension-candidate' : ''
-        } ${hasAegis ? 'has-aegis' : ''} ${isFrozen ? 'is-frozen' : ''}`}
+        } ${isPlayable ? 'is-playable' : ''} ${hasAegis ? 'has-aegis' : ''} ${isFrozen ? 'is-frozen' : ''}`}
         data-id={card.id}
         data-element={card.element}
         data-rarity={card.rarity}

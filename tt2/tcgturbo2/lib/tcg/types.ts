@@ -27,7 +27,7 @@ export interface CardDef {
   canAttackOnSummon?: boolean;
   lifesteal?: boolean;
   targetType?: 'any_enemy' | 'enemy_unit' | 'friendly_unit' | 'none';
-  trigger?: 'on_vanguard_attacked' | 'on_enemy_ascend' | 'on_creature_attack' | 'on_direct_attack' | 'on_lethal_damage';
+  trigger?: 'on_champion_attacked' | 'on_vanguard_attacked' | 'on_enemy_ascend' | 'on_creature_attack' | 'on_direct_attack' | 'on_lethal_damage';
 }
 
 export interface CardInstance extends CardDef {
@@ -49,7 +49,7 @@ export interface HeroPower {
   icon?: string;
 }
 
-export interface VanguardHero {
+export interface ChampionHero {
   id: string;
   name: string;
   title: string;
@@ -61,11 +61,15 @@ export interface VanguardHero {
   heroPowerUsed?: boolean;
 }
 
+// Backwards compatibility alias
+export type VanguardHero = ChampionHero;
+
 export interface PlayerState {
   id: 1 | 2;
   name: string;
   isAI: boolean;
-  vanguard: VanguardHero;
+  champion: ChampionHero;
+  vanguard: ChampionHero; // compatibility alias
   mana: number;
   maxMana: number;
   deck: CardInstance[];
@@ -93,7 +97,8 @@ export interface FloatingCombatText {
 
 export interface PresetDeck {
   name: string;
-  vanguard: string;
+  champion: string;
+  vanguard: string; // compatibility alias
   description: string;
   element: ElementType;
   cards: string[];
@@ -142,3 +147,9 @@ export interface EquippedCosmetics {
   boardTheme: string;
   foilStyle: string;
 }
+
+export type GameAction =
+  | { type: 'playCard'; instanceId: string; targetLaneIndex?: number | null; targetUnitId?: string | null }
+  | { type: 'declareAttack'; attackerInstanceId: string; targetType: 'champion' | 'vanguard' | 'creature'; targetLaneOrId?: number | string | null }
+  | { type: 'activateHeroPower' }
+  | { type: 'endTurn' };

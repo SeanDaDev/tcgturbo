@@ -1,5 +1,5 @@
 import { CARDS_DATA } from './cardsData';
-import { VANGUARDS_DATA } from './vanguardsData';
+import { CHAMPIONS_DATA, VANGUARDS_DATA } from './vanguardsData';
 import { PRESET_DECKS } from './presetDecks';
 import { soundEngine } from './soundEngine';
 import {
@@ -9,7 +9,8 @@ import {
   PlayerState,
   GameMode,
   ActionLog,
-  FloatingCombatText
+  FloatingCombatText,
+  GameAction
 } from './types';
 
 let instanceCounter = 1;
@@ -39,9 +40,12 @@ export function createPlayer(
   name: string,
   isAI: boolean,
   deckCardIds: string[],
-  vanguardId: string
+  championOrVanguardId: string
 ): PlayerState {
-  const vanguardDef = VANGUARDS_DATA.find(v => v.id === vanguardId) || VANGUARDS_DATA[0];
+  const championDef =
+    CHAMPIONS_DATA.find(v => v.id === championOrVanguardId) ||
+    VANGUARDS_DATA.find(v => v.id === championOrVanguardId) ||
+    CHAMPIONS_DATA[0];
 
   const deck: CardInstance[] = [];
   deckCardIds.forEach(cardId => {
@@ -57,14 +61,17 @@ export function createPlayer(
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
 
+  const champInst = {
+    ...championDef,
+    heroPowerUsed: false
+  };
+
   return {
     id,
     name,
     isAI,
-    vanguard: {
-      ...vanguardDef,
-      heroPowerUsed: false
-    },
+    champion: champInst,
+    vanguard: champInst,
     mana: 1,
     maxMana: 1,
     deck,
@@ -90,8 +97,8 @@ export function createInitialGame(
   const p1Cards = customP1Cards && customP1Cards.length >= 10 ? customP1Cards : p1Preset.cards;
   const p2Cards = customP2Cards && customP2Cards.length >= 10 ? customP2Cards : p2Preset.cards;
 
-  const p1 = createPlayer(1, 'Player 1', false, p1Cards, p1Preset.vanguard);
-  const p2 = createPlayer(2, mode === 'solo_ai' ? 'AI Tactician' : 'Player 2', mode === 'solo_ai', p2Cards, p2Preset.vanguard);
+  const p1 = createPlayer(1, 'Player 1', false, p1Cards, p1Preset.champion || p1Preset.vanguard);
+  const p2 = createPlayer(2, mode === 'solo_ai' ? 'AI Tactician' : 'Player 2', mode === 'solo_ai', p2Cards, p2Preset.champion || p2Preset.vanguard);
 
   let state: GameState = {
     mode,
@@ -269,8 +276,12 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
             maxMana: nextMax,
             mana: nextMax,
             board: nextBoard,
+            champion: {
+              ...(p.champion || p.vanguard),
+              heroPowerUsed: false
+            },
             vanguard: {
-              ...p.vanguard,
+              ...(p.vanguard || p.champion),
               heroPowerUsed: false
             }
           }
@@ -290,16 +301,24 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
   return nextState;
 }
 
-export function calculateAscensionCost(card: CardInstance, existingUnit: CardInstance | null): number {
-  if (
-    existingUnit &&
-    card.type === 'creature' &&
-    card.form &&
-    existingUnit.form &&
-    card.form > existingUnit.form &&
-    (!card.ascendsFrom || card.ascendsFrom === existingUnit.element)
-  ) {
-    return Math.max(1, card.cost - existingUnit.form * 2);
+export function canAscendOnUnit(
+  card: CardDef | CardInstance,
+  existingUnit: CardDef | CardInstance | null
+): boolean {
+  if (!existingUnit || card.type !== 'creature' || existingUnit.type !== 'creature') return false;
+  if (card.element !== existingUnit.element) return false;
+  return (
+    card.cost > existingUnit.cost ||
+    (!!card.form && !!existingUnit.form && card.form > existingUnit.form)
+  );
+}
+
+export function calculateAscensionCost(
+  card: CardDef | CardInstance,
+  existingUnit: CardDef | CardInstance | null
+): number {
+  if (canAscendOnUnit(card, existingUnit) && existingUnit) {
+    return Math.max(1, card.cost - existingUnit.cost);
   }
   return card.cost;
 }
@@ -328,13 +347,7 @@ export function playCard(
   }
 
   const existingUnit = lane !== null && lane >= 0 ? active.board[lane] : null;
-  const isAscending =
-    !!existingUnit &&
-    card.type === 'creature' &&
-    !!card.form &&
-    !!existingUnit.form &&
-    card.form > existingUnit.form &&
-    (!card.ascendsFrom || card.ascendsFrom === existingUnit.element);
+  const isAscending = canAscendOnUnit(card, existingUnit);
 
   const actualCost = calculateAscensionCost(card, existingUnit);
   const currentMana = active.mana ?? 0;
@@ -535,7 +548,7 @@ export function playCard(
 export function declareAttack(
   state: GameState,
   attackerInstanceId: string,
-  targetType: 'vanguard' | 'creature',
+  targetType: 'champion' | 'vanguard' | 'creature',
   targetLaneOrId: number | string | null = null
 ): GameState {
   if (state.winner) return state;
@@ -554,8 +567,8 @@ export function declareAttack(
 
   const tauntCreatures = opponent.board.filter(c => c && c.hasTaunt);
 
-  // 1. ATTACK ENEMY VANGUARD
-  if (targetType === 'vanguard') {
+  // 1. ATTACK ENEMY CHAMPION (COMMANDER)
+  if (targetType === 'champion' || targetType === 'vanguard') {
     if (tauntCreatures.length > 0) {
       return logMessage(state, `Taunt guardian is blocking direct attacks! Destroy it first.`, 'log-trap');
     }
@@ -575,16 +588,18 @@ export function declareAttack(
       return s;
     }
 
-    // Check vanguard attacked wards (e.g. Sunfire Sigil deals 4 to attacker)
-    let nextState = checkAndTriggerWards(wardState, opponentIndex, 'on_vanguard_attacked', attacker);
+    // Check champion/vanguard attacked wards (e.g. Sunfire Sigil deals 4 to attacker)
+    let nextState = checkAndTriggerWards(wardState, opponentIndex, 'on_champion_attacked', attacker);
+    nextState = checkAndTriggerWards(nextState, opponentIndex, 'on_vanguard_attacked', attacker);
 
     soundEngine.playAttack();
     const damage = attacker.currentAtk;
-    const nextOppHp = opponent.vanguard.hp - damage;
+    const oppChamp = opponent.champion || opponent.vanguard;
+    const nextOppHp = oppChamp.hp - damage;
 
     nextState = logMessage(
       nextState,
-      `${attacker.name} strikes ${opponent.vanguard.name} directly for ${damage} damage!`,
+      `${attacker.name} strikes Champion ${oppChamp.name} directly for ${damage} damage!`,
       'log-attack'
     );
 
@@ -592,7 +607,11 @@ export function declareAttack(
       ...nextState,
       players: nextState.players.map((p, idx) =>
         idx === opponentIndex
-          ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextOppHp) } }
+          ? {
+              ...p,
+              champion: { ...(p.champion || p.vanguard), hp: Math.max(0, nextOppHp) },
+              vanguard: { ...(p.vanguard || p.champion), hp: Math.max(0, nextOppHp) }
+            }
           : p
       ) as [PlayerState, PlayerState]
     };
@@ -780,7 +799,8 @@ export function activateHeroPower(state: GameState): GameState {
         ? {
             ...p,
             mana: currentMana - powerCost,
-            vanguard: { ...p.vanguard, heroPowerUsed: true }
+            champion: { ...(p.champion || p.vanguard), heroPowerUsed: true },
+            vanguard: { ...(p.vanguard || p.champion), heroPowerUsed: true }
           }
         : p
     ) as [PlayerState, PlayerState]
@@ -1493,4 +1513,31 @@ function checkLethalWard(state: GameState, playerIndex: number): GameState {
   nextState = drawCardInternal(nextState, (playerIndex + 1) as 1 | 2);
 
   return nextState;
+}
+
+export function dispatchGameAction(state: GameState, action: GameAction): GameState {
+  if (state.winner) return state;
+
+  switch (action.type) {
+    case 'playCard':
+      return playCard(
+        state,
+        action.instanceId,
+        action.targetLaneIndex ?? null,
+        action.targetUnitId ?? null
+      );
+    case 'declareAttack':
+      return declareAttack(
+        state,
+        action.attackerInstanceId,
+        action.targetType,
+        action.targetLaneOrId ?? null
+      );
+    case 'activateHeroPower':
+      return activateHeroPower(state);
+    case 'endTurn':
+      return endTurn(state);
+    default:
+      return state;
+  }
 }

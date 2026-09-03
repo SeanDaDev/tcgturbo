@@ -3,9 +3,10 @@ import { PresetDeck } from './types';
 export const PRESET_DECKS: Record<string, PresetDeck> = {
   solar_pyre: {
     name: 'Solar Flare Aggro',
+    champion: 'sol_champion',
     vanguard: 'sol_champion',
     element: 'solar',
-    description: 'Fast-paced aggressive deck dealing direct burns and overwhelming board presence with Aegis vanguard champions.',
+    description: 'Fast-paced aggressive deck dealing direct burns and overwhelming board presence with Aegis champions.',
     cards: [
       'sol_initiate', 'sol_initiate', 'sol_initiate',
       'sol_paladin', 'sol_paladin',
@@ -17,6 +18,7 @@ export const PRESET_DECKS: Record<string, PresetDeck> = {
   },
   void_shadow: {
     name: 'Void Eclipse Control',
+    champion: 'void_champion',
     vanguard: 'void_champion',
     element: 'void',
     description: 'Lifesteal and destruction control strategy designed to whittle down enemy threats and turn death into card advantage.',
@@ -31,6 +33,7 @@ export const PRESET_DECKS: Record<string, PresetDeck> = {
   },
   verdant_ramp: {
     name: 'Verdant Overgrowth Ramp',
+    champion: 'verdant_champion',
     vanguard: 'verdant_champion',
     element: 'verdant',
     description: 'Ramps maximum Mana quickly with Taunt protectors and massive Colossus avatars that overwhelm the opponent.',
@@ -45,6 +48,7 @@ export const PRESET_DECKS: Record<string, PresetDeck> = {
   },
   tide_astral: {
     name: 'Tidal Chrono Combo',
+    champion: 'tide_champion',
     vanguard: 'tide_champion',
     element: 'tide',
     description: 'Tempo and board-freeze combo deck that stalls enemy assaults while manipulating time for extra turns.',

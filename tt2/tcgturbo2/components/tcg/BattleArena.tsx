@@ -3,44 +3,55 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { Card } from './Card';
-import { GameState, CardDef, CardInstance, EquippedCosmetics } from '@/lib/tcg/types';
+import { GameState, CardDef, CardInstance, EquippedCosmetics, GameAction } from '@/lib/tcg/types';
 import {
-  playCard,
-  declareAttack,
-  activateHeroPower,
-  endTurn,
-  calculateAscensionCost
+  calculateAscensionCost,
+  canAscendOnUnit,
+  dispatchGameAction
 } from '@/lib/tcg/gameEngine';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
-import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw } from 'lucide-react';
+import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface BattleArenaProps {
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  onAction?: (action: GameAction) => void;
   onInspectCard: (card: CardDef | CardInstance) => void;
   onNewDuel: () => void;
+  onChangeDecks?: () => void;
   equippedCosmetics?: EquippedCosmetics;
   totalSpentUSD?: number;
+  localPlayerNumber?: 1 | 2;
+  roomCode?: string;
 }
 
 export function BattleArena({
   gameState,
   setGameState,
+  onAction,
   onInspectCard,
   onNewDuel,
+  onChangeDecks,
   equippedCosmetics,
-  totalSpentUSD = 0
+  totalSpentUSD = 0,
+  localPlayerNumber,
+  roomCode
 }: BattleArenaProps) {
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Fancy Effects: Screen shake, summon impact ripples, mobile drawer
+  const [screenShake, setScreenShake] = useState<boolean>(false);
+  const [dropImpactSlot, setDropImpactSlot] = useState<{ player: 1 | 2; lane: number } | null>(null);
+  const [isMobileHandExpanded, setIsMobileHandExpanded] = useState<boolean>(true);
+  const [combatFlash, setCombatFlash] = useState<string | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const activePlayer = gameState.players[gameState.currentTurn - 1];
-  const opponentPlayer = gameState.players[gameState.currentTurn === 1 ? 1 : 0];
   const isPlayer1Turn = gameState.currentTurn === 1;
 
   // Clear selections
@@ -62,6 +73,24 @@ export function BattleArena({
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   };
+
+  // Trigger screen shake & impact juice
+  const triggerImpactJuice = useCallback((type: 'attack' | 'summon' | 'ascend') => {
+    setScreenShake(true);
+    setTimeout(() => setScreenShake(false), 360);
+
+    if (type === 'attack') {
+      soundEngine.playAttack();
+      setCombatFlash('rgba(239, 68, 68, 0.25)');
+      setTimeout(() => setCombatFlash(null), 250);
+    } else if (type === 'ascend') {
+      soundEngine.playAscend();
+      setCombatFlash('rgba(245, 158, 11, 0.3)');
+      setTimeout(() => setCombatFlash(null), 300);
+    } else {
+      soundEngine.playSummon();
+    }
+  }, []);
 
   // Render curved combat targeting laser arrow
   useEffect(() => {
@@ -110,21 +139,41 @@ export function BattleArena({
     ctx.restore();
   }, [selectedAttackerId, mousePos]);
 
-  // Handlers
+  const dispatchAction = useCallback(
+    (action: GameAction) => {
+      if (action.type === 'declareAttack') {
+        triggerImpactJuice('attack');
+      } else if (action.type === 'playCard' && typeof action.targetLaneIndex === 'number') {
+        setDropImpactSlot({
+          player: isPlayer1Turn ? 1 : 2,
+          lane: action.targetLaneIndex
+        });
+        setTimeout(() => setDropImpactSlot(null), 600);
+        triggerImpactJuice('summon');
+      }
+
+      if (onAction) {
+        onAction(action);
+      } else {
+        setGameState(s => dispatchGameAction(s, action));
+      }
+    },
+    [onAction, setGameState, isPlayer1Turn, triggerImpactJuice]
+  );
+
+  // Card click handlers
   const handleCardClick = (card: CardInstance, playerId: 1 | 2) => {
     if (gameState.winner) return;
 
     // Friendly hand card clicked
     if (gameState.currentTurn === playerId) {
       if (card.type === 'spell' || card.type === 'ward') {
-        // Direct cast or ward
-        setGameState(s => playCard(s, card.instanceId));
+        dispatchAction({ type: 'playCard', instanceId: card.instanceId });
         clearSelections();
       } else {
-        // Select creature to drop
         if (selectedHandCardId === card.instanceId) {
           // Double tap plays in first available lane
-          setGameState(s => playCard(s, card.instanceId));
+          dispatchAction({ type: 'playCard', instanceId: card.instanceId });
           clearSelections();
         } else {
           setSelectedHandCardId(card.instanceId);
@@ -140,9 +189,13 @@ export function BattleArena({
     const isFriendly = gameState.currentTurn === playerId;
 
     if (isFriendly) {
-      // In-place ascension check: if friendly hand card selected, attempt ascension
+      // In-place evolution check: if friendly hand card selected, attempt evolution
       if (selectedHandCardId) {
-        setGameState(s => playCard(s, selectedHandCardId, laneIdx));
+        dispatchAction({
+          type: 'playCard',
+          instanceId: selectedHandCardId,
+          targetLaneIndex: laneIdx
+        });
         clearSelections();
         return;
       }
@@ -159,18 +212,28 @@ export function BattleArena({
     } else {
       // Opponent creature clicked as attack target
       if (selectedAttackerId) {
-        setGameState(s => declareAttack(s, selectedAttackerId, 'creature', laneIdx));
+        dispatchAction({
+          type: 'declareAttack',
+          attackerInstanceId: selectedAttackerId,
+          targetType: 'creature',
+          targetLaneOrId: laneIdx
+        });
         clearSelections();
       }
     }
   };
 
-  const handleVanguardClick = (targetPlayerId: 1 | 2) => {
+  const handleChampionClick = (targetPlayerId: 1 | 2) => {
     if (gameState.winner) return;
 
-    // Direct strike against opponent hero
+    // Direct strike against opponent Champion Commander
     if (selectedAttackerId && gameState.currentTurn !== targetPlayerId) {
-      setGameState(s => declareAttack(s, selectedAttackerId, 'vanguard', null));
+      dispatchAction({
+        type: 'declareAttack',
+        attackerInstanceId: selectedAttackerId,
+        targetType: 'champion',
+        targetLaneOrId: null
+      });
       clearSelections();
     }
   };
@@ -178,7 +241,11 @@ export function BattleArena({
   const handleLaneSlotClick = (laneIdx: number, playerId: 1 | 2) => {
     if (gameState.winner) return;
     if (selectedHandCardId && gameState.currentTurn === playerId) {
-      setGameState(s => playCard(s, selectedHandCardId, laneIdx));
+      dispatchAction({
+        type: 'playCard',
+        instanceId: selectedHandCardId,
+        targetLaneIndex: laneIdx
+      });
       clearSelections();
     }
   };
@@ -186,188 +253,286 @@ export function BattleArena({
   // Selected hand card reference
   const selectedCardInHand = activePlayer.hand.find(c => c.instanceId === selectedHandCardId);
 
-  // Check Taunt on opponent board
-  const oppTaunters = opponentPlayer.board.filter(c => c && c.hasTaunt);
+  // Check Taunt on both boards
+  const p1Taunters = gameState.players[0].board.filter(c => c && c.hasTaunt);
+  const p2Taunters = gameState.players[1].board.filter(c => c && c.hasTaunt);
 
-  // Safe Mana & MaxMana getters to prevent NaN in active sessions
+  // Safe Mana & MaxMana getters
   const p1Mana = gameState.players[0].mana ?? 1;
   const p1MaxMana = gameState.players[0].maxMana ?? 1;
   const p2Mana = gameState.players[1].mana ?? 1;
   const p2MaxMana = gameState.players[1].maxMana ?? 1;
 
+  // Champion Commander data getters
+  const p1Champ = gameState.players[0].champion || gameState.players[0].vanguard;
+  const p2Champ = gameState.players[1].champion || gameState.players[1].vanguard;
+
+  // Hand visibility in Couch Co-Op:
+  const hideP2Hand = (gameState.mode === 'couch_2p' && isPlayer1Turn) || gameState.players[1].isAI;
+  const hideP1Hand = gameState.mode === 'couch_2p' && !isPlayer1Turn;
+
   return (
     <div
-      className="battle-arena-view flex flex-col flex-1 w-full max-w-[1560px] mx-auto p-2 md:p-4 gap-2 relative overflow-hidden"
+      className={`battle-arena-view flex flex-col flex-1 w-full max-w-[1560px] mx-auto p-1.5 sm:p-3 md:p-4 gap-2 relative overflow-hidden select-none ${
+        screenShake ? 'animate-screen-shake' : ''
+      }`}
       onMouseMove={handleMouseMove}
     >
+      {/* Dynamic Combat Flash Overlay */}
+      {combatFlash && (
+        <div
+          className="fixed inset-0 pointer-events-none z-50 transition-opacity duration-200"
+          style={{ backgroundColor: combatFlash }}
+        />
+      )}
+
       {/* Targeting Laser Canvas */}
       <canvas
         ref={canvasRef}
-        className="combat-arrow-canvas fixed inset-0 pointer-events-none z-[400]"
+        className="pointer-events-none absolute inset-0 z-50"
       />
 
-      {/* Arena Sub-Header Topbar */}
-      <div className="arena-topbar flex flex-wrap items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2 backdrop-blur-md gap-3 shadow-lg">
-        <div className="match-info-pill flex items-center gap-2 md:gap-3 text-xs md:text-sm font-mono">
-          <span className="mode-badge px-2.5 py-1 rounded-md bg-purple-950/60 border border-purple-500/40 text-purple-300 font-bold flex items-center gap-1.5">
-            {gameState.mode === 'couch_2p' ? <User className="w-3.5 h-3.5 text-purple-400" /> : <Bot className="w-3.5 h-3.5 text-sky-400" />}
-            {gameState.mode === 'couch_2p' ? 'Local 2P Couch Duel' : 'Solo vs AI Tactician'}
+      {/* Arena Topbar (Mobile Optimized) */}
+      <div className="arena-topbar flex flex-wrap items-center justify-between bg-slate-900/90 border border-amber-500/20 rounded-xl px-2.5 sm:px-4 py-1.5 backdrop-blur-md gap-2 shadow-lg z-20">
+        <div className="match-info-pill flex items-center gap-1.5 sm:gap-3 text-xs sm:text-sm font-mono">
+          <span className="mode-badge px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-purple-950/70 border border-purple-500/40 text-purple-300 font-bold flex items-center gap-1 text-[11px] sm:text-xs">
+            {gameState.mode === 'couch_2p' ? <User className="w-3 h-3 text-purple-400" /> : <Bot className="w-3 h-3 text-sky-400" />}
+            {gameState.mode === 'couch_2p'
+              ? 'Local 2P'
+              : localPlayerNumber
+              ? `Online (P${localPlayerNumber})`
+              : 'vs AI'}
           </span>
-          <span className="turn-indicator-badge font-bold text-amber-300 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-            {activePlayer.name}&apos;s Turn
+          <span className="turn-indicator-badge font-bold text-amber-300 flex items-center gap-1 text-[11px] sm:text-xs">
+            <Sparkles className="w-3 h-3 text-amber-400 animate-spin" />
+            <span className="truncate max-w-[110px] sm:max-w-none">{activePlayer.name}&apos;s Turn</span>
           </span>
-          <span className="text-slate-400">Round {gameState.round}</span>
+          <span className="text-slate-400 text-[11px] sm:text-xs">R{gameState.round}</span>
         </div>
 
-        <div className="phase-tracker flex items-center gap-1.5 bg-slate-950/60 px-3 py-1 rounded-full border border-slate-800 text-xs font-mono">
-          <span className="phase-step active bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-0.5 rounded-full uppercase">
-            Main Phase
-          </span>
-          <span className="phase-step text-slate-400 px-2 py-0.5 uppercase">
-            Combat Ready
+        {/* Action Guide (Hidden on tiny screens to save space) */}
+        <div className="hidden lg:flex items-center gap-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-700/70 text-xs font-mono">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <span className="text-slate-200">
+            Action: Summon, evolve & attack in any order
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {roomCode && (
+            <span className="hidden sm:inline bg-sky-950 border border-sky-500/50 text-sky-300 px-2 py-0.5 rounded text-[11px] font-mono font-bold">
+              Room: {roomCode}
+            </span>
+          )}
+
+          {/* Mobile Hand Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsMobileHandExpanded(!isMobileHandExpanded)}
+            className="md:hidden flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-lg text-[11px] font-mono font-bold"
+            title="Toggle Hand View on Mobile"
+          >
+            {isMobileHandExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <span>{isMobileHandExpanded ? 'Hide Hand' : 'View Hand'}</span>
+          </button>
+
+          {onChangeDecks && (
+            <button
+              type="button"
+              onClick={onChangeDecks}
+              className="btn btn-outline px-2 sm:px-3 py-1 text-[11px] sm:text-xs flex items-center gap-1 text-sky-200"
+            >
+              <Swords className="w-3 h-3 text-sky-400" />
+              <span className="hidden sm:inline">Decks</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onNewDuel}
-            className="btn btn-outline px-3 py-1.5 text-xs flex items-center gap-1.5 hover:border-amber-500/60"
+            className="btn btn-outline px-2 sm:px-3 py-1 text-[11px] sm:text-xs flex items-center gap-1 hover:border-amber-500/60 text-amber-200"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-            New Duel
+            <RotateCcw className="w-3 h-3 text-amber-400" />
+            <span className="hidden sm:inline">Rematch</span>
           </button>
         </div>
       </div>
 
-      {/* Duel Mat Board */}
-      <div className="duel-mat flex-1 flex flex-col justify-between bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800/80 rounded-2xl p-3 md:p-5 relative shadow-2xl overflow-hidden">
-        {/* Center Divider Line */}
-        <div className="mat-center-divider absolute top-1/2 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-slate-700/50 to-transparent pointer-events-none" />
+      {/* Hearthstone Tavern Duel Board */}
+      <div className="duel-mat flex-1 flex flex-col justify-between bg-gradient-to-b from-[#0a0c16] via-[#101428] to-[#0a0c16] border-2 sm:border-4 border-[#2d241e] rounded-2xl p-2 sm:p-3 md:p-4 relative shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden">
+        {/* Hearthstone Wood Grain Texture & Mat Inset */}
+        <div className="absolute inset-0 pointer-events-none border border-amber-500/10 rounded-xl" />
+        <div className="mat-center-divider absolute top-1/2 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-amber-500/30 to-transparent pointer-events-none" />
 
         {/* =========================================================================
-            OPPONENT ZONE (PLAYER 2 / AI)
+            PLAYER 2 / OPPONENT ZONE (TOP)
             ========================================================================= */}
-        <div className="player-mat-zone opponent-zone flex flex-col gap-2 relative z-10">
-          <div className="mat-row flex flex-wrap items-center justify-between gap-3">
-            {/* Vanguard Hero Box (P2) */}
+        <div className="player-mat-zone p2-zone flex flex-col gap-1.5 relative z-10">
+          <div className="mat-row flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+            {/* Hearthstone Oval Hero Portrait Frame (P2) */}
             <div
-              className={`vanguard-box flex items-center gap-3 bg-slate-900/90 border rounded-xl p-2.5 min-w-[240px] md:min-w-[280px] shadow-lg cursor-pointer transition-all ${
-                selectedAttackerId && isPlayer1Turn && oppTaunters.length === 0
-                  ? 'border-red-500 ring-2 ring-red-500/60 animate-pulse'
+              className={`champion-portrait-wrap flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 to-slate-950 border-2 rounded-2xl p-1.5 sm:p-2 shadow-xl cursor-pointer transition-all ${
+                selectedAttackerId && isPlayer1Turn && p2Taunters.length === 0
+                  ? 'border-red-500 ring-4 ring-red-500/60 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.7)]'
                   : !isPlayer1Turn
-                  ? 'border-sky-500/60 shadow-[0_0_15px_rgba(56,189,248,0.25)]'
+                  ? 'border-purple-400/80 shadow-[0_0_18px_rgba(192,132,252,0.4)]'
                   : 'border-slate-800 hover:border-slate-700'
               }`}
-              onClick={() => handleVanguardClick(2)}
-              title={selectedAttackerId && isPlayer1Turn ? 'Click to declare DIRECT ATTACK on Vanguard!' : ''}
+              onClick={() => handleChampionClick(2)}
+              title={selectedAttackerId && isPlayer1Turn ? 'Click to declare DIRECT ATTACK on enemy Champion!' : 'Champion Command Zone'}
             >
-              <div className="vanguard-avatar relative w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 shadow-md">
+              {/* Hearthstone Oval Hero Token */}
+              <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full overflow-hidden border-2 border-amber-400 shadow-md flex-shrink-0 bg-slate-950">
                 <Image
-                  src={gameState.players[1].vanguard.avatar}
-                  alt={gameState.players[1].vanguard.name}
+                  src={p2Champ.avatar}
+                  alt={p2Champ.name}
                   fill
-                  sizes="48px"
+                  sizes="52px"
                   priority
                   className="object-cover"
                 />
+                {/* Hearthstone Blood-Red Health Badge */}
+                <div className="absolute bottom-0 right-0 bg-gradient-to-br from-red-600 to-rose-700 text-white font-mono font-black text-[10px] sm:text-xs px-1.5 rounded-tl-md border-t border-l border-red-300 drop-shadow flex items-center justify-center">
+                  {p2Champ.hp}
+                </div>
               </div>
 
-              <div className="vanguard-info flex flex-col flex-1 gap-1">
-                <div className="vanguard-name text-xs md:text-sm font-bold text-slate-100 font-serif flex items-center justify-between">
-                  <span>{gameState.players[1].name}</span>
-                  <span className="text-[10px] text-purple-400 font-mono">({gameState.players[1].vanguard.name})</span>
-                </div>
-                <div className="vanguard-hp-bar-wrap w-full h-3 bg-rose-950/80 rounded-full overflow-hidden border border-rose-800/50 relative">
-                  <div
-                    className="vanguard-hp-bar h-full bg-gradient-to-r from-rose-600 to-red-500 transition-all duration-300"
-                    style={{
-                      width: `${Math.max(0, (gameState.players[1].vanguard.hp / gameState.players[1].vanguard.maxHp) * 100)}%`
-                    }}
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono font-black text-white drop-shadow">
-                    {gameState.players[1].vanguard.hp} / {gameState.players[1].vanguard.maxHp} HP
+              {/* Name & Title */}
+              <div className="flex flex-col min-w-0 pr-1">
+                <div className="flex items-center gap-1">
+                  <Crown className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[90px] sm:max-w-[130px]">
+                    {gameState.players[1].name}
                   </span>
                 </div>
+                <span className="text-[10px] text-purple-300 font-mono truncate max-w-[90px] sm:max-w-[130px]">
+                  {p2Champ.name}
+                </span>
               </div>
+
+              {/* Commander Power Medallion (P2) */}
+              <button
+                type="button"
+                disabled={
+                  p2Champ.heroPowerUsed ||
+                  p2Mana < p2Champ.heroPower.cost ||
+                  isPlayer1Turn ||
+                  gameState.players[1].isAI
+                }
+                onClick={() => {
+                  if (!isPlayer1Turn) dispatchAction({ type: 'activateHeroPower' });
+                }}
+                className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
+                  !p2Champ.heroPowerUsed &&
+                  p2Mana >= p2Champ.heroPower.cost &&
+                  !isPlayer1Turn &&
+                  !gameState.players[1].isAI
+                    ? 'bg-gradient-to-br from-indigo-900 to-purple-900 border-amber-400 text-purple-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
+                    : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
+                }`}
+                title={`Commander Power (2 Mana): ${p2Champ.heroPower.name} - ${p2Champ.heroPower.desc}`}
+              >
+                <Zap className="w-4 h-4 text-amber-300" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold border border-blue-300 shadow">
+                  2
+                </span>
+              </button>
             </div>
 
             {/* Secret Wards (P2) */}
-            <div className="secret-wards-row flex items-center gap-2">
+            <div className="secret-wards-row flex items-center gap-1.5">
               {gameState.players[1].wards.map((ward, idx) => (
                 <div
                   key={`p2_ward_${idx}`}
-                  className={`ward-slot-chip w-10 h-10 rounded-xl border flex items-center justify-center font-mono text-xs transition-all ${
+                  className={`ward-slot-chip w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center text-xs transition-all ${
                     ward
-                      ? 'border-purple-500 bg-purple-950/80 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
+                      ? 'border-purple-500 bg-purple-950/80 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.6)] animate-pulse'
                       : 'border-dashed border-slate-800 bg-slate-950/40 text-slate-700'
                   }`}
-                  title={ward ? 'Face-Down Secret Ward Active' : 'Empty Ward Slot'}
+                  title={ward ? 'Active Face-Down Secret Ward' : 'Empty Ward Slot'}
                 >
-                  <ShieldAlert className={`w-4 h-4 ${ward ? 'text-purple-400' : 'text-slate-700'}`} />
+                  <ShieldAlert className={`w-3.5 h-3.5 ${ward ? 'text-purple-400' : 'text-slate-700'}`} />
                 </div>
               ))}
             </div>
 
-            {/* Opponent Mana & Piles */}
-            <div className="flex items-center gap-3">
-              <div className="aether-meter-wrap flex items-center gap-2 bg-slate-950/70 border border-slate-800 px-3 py-1.5 rounded-xl">
-                <span className="aether-count-text font-mono text-xs font-bold text-sky-400">
-                  {p2Mana} / {p2MaxMana}
+            {/* Hearthstone Chunky Mana Tray & Piles (P2) */}
+            <div className="flex items-center gap-2">
+              <div className="mana-tray-hearthstone flex items-center gap-1.5 bg-slate-950/90 border border-sky-500/40 px-2.5 py-1 rounded-xl shadow-inner">
+                <span className="font-mono text-xs font-black text-sky-400 flex items-center gap-0.5">
+                  💎 {p2Mana}/{p2MaxMana}
                 </span>
-                <div className="aether-crystals-row flex gap-1">
+                <div className="hidden sm:flex gap-1">
                   {Array.from({ length: p2MaxMana }).map((_, i) => (
                     <div
                       key={`p2_gem_${i}`}
-                      className={`aether-gem w-2.5 h-3.5 rounded-sm border ${
+                      className={`w-2 h-3 rounded-xs border ${
                         i < p2Mana
-                          ? 'bg-gradient-to-b from-sky-400 to-blue-600 border-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.7)]'
-                          : 'bg-slate-800 border-slate-700'
+                          ? 'bg-gradient-to-b from-cyan-300 to-blue-600 border-cyan-200 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
+                          : 'bg-slate-800/60 border-slate-700'
                       }`}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="piles-group flex gap-2">
-                <div
-                  className="card-pile w-11 h-16 rounded-lg bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-[9px] font-mono text-slate-400 shadow-sm"
-                  title="Opponent Deck"
-                >
-                  <span>DECK</span>
-                  <span className="pile-count-badge font-bold text-slate-200 text-xs">
-                    {gameState.players[1].deck.length}
-                  </span>
+              {/* Piles */}
+              <div className="flex gap-1.5 text-[9px] font-mono">
+                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-[8px]">DECK</span>
+                  <span className="font-bold text-white text-[10px]">{gameState.players[1].deck.length}</span>
                 </div>
-                <div
-                  className="card-pile w-11 h-16 rounded-lg bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-[9px] font-mono text-slate-400 shadow-sm"
-                  title="Opponent Graveyard"
-                >
-                  <span>GRAVE</span>
-                  <span className="pile-count-badge font-bold text-slate-200 text-xs">
-                    {gameState.players[1].graveyard.length}
-                  </span>
+                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-[8px]">GRAVE</span>
+                  <span className="font-bold text-white text-[10px]">{gameState.players[1].graveyard.length}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Opponent Hand */}
-          <div className="hand-container opponent-hand flex justify-center items-center gap-[-20px] min-h-[120px] py-1">
+          {/* Player 2 Hand (Hearthstone Curved Fan Arc) */}
+          <div className="hand-container p2-hand flex justify-center items-center gap-[-14px] min-h-[95px] sm:min-h-[120px] py-1">
             {gameState.players[1].hand.map((card, idx) => {
-              const hideCards = (gameState.mode === 'couch_2p' && isPlayer1Turn) || gameState.players[1].isAI;
+              const isSelected = selectedHandCardId === card.instanceId && !isPlayer1Turn;
+              const total = gameState.players[1].hand.length;
+              const mid = (total - 1) / 2;
+              const fanAngle = total > 1 ? (idx - mid) * 3 : 0;
+              const fanY = total > 1 ? Math.abs(idx - mid) * 2 : 0;
+
+              // Hearthstone Playable Green Glow: card cost <= mana and friendly turn
+              const isCardPlayable = !hideP2Hand && !isPlayer1Turn && card.cost <= p2Mana;
+
               return (
-                <div key={card.instanceId || `p2_card_${idx}`} className="transition-all -mx-2 hover:translate-y-1">
+                <div
+                  key={card.instanceId || `p2_card_${idx}`}
+                  style={{
+                    transform: isSelected
+                      ? 'translateY(-20px) scale(1.1) rotate(0deg)'
+                      : `translateY(${fanY}px) rotate(${fanAngle}deg)`,
+                    transition: 'all 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                  }}
+                  className={`-mx-2 sm:-mx-2.5 z-20 hover:z-40 ${
+                    isSelected ? 'z-40 ring-2 ring-purple-400 rounded-xl' : ''
+                  }`}
+                >
                   <Card
                     card={card}
-                    isFaceDown={hideCards}
-                    size="sm"
-                    onInspect={onInspectCard}
+                    isFaceDown={hideP2Hand}
+                    size={!isPlayer1Turn ? 'sm' : 'xs'}
+                    isPlayable={isCardPlayable}
+                    draggable={!hideP2Hand && !isPlayer1Turn}
                     equippedCardBack={equippedCosmetics?.cardBack}
                     equippedFoilStyle={equippedCosmetics?.foilStyle}
+                    onDragStart={() => {
+                      if (!hideP2Hand && !isPlayer1Turn) {
+                        setDraggedCardId(card.instanceId);
+                        setSelectedHandCardId(card.instanceId);
+                      }
+                    }}
+                    onInspect={onInspectCard}
                     onClick={() => {
-                      if (!hideCards) handleCardClick(card, 2);
+                      if (!hideP2Hand) handleCardClick(card, 2);
                     }}
                   />
                 </div>
@@ -375,31 +540,94 @@ export function BattleArena({
             })}
           </div>
 
-          {/* Opponent Lanes */}
-          <div className="lanes-container flex justify-center gap-3 py-1">
+          {/* Player 2 Battlefield Lanes (Responsive Mobile Touch + Desktop Drag/Drop) */}
+          <div className="lanes-container p2-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
             {gameState.players[1].board.map((creature, laneIdx) => {
               const isTargetCandidate = !!selectedAttackerId && isPlayer1Turn;
               const isTaunter = creature && creature.hasTaunt;
-              const isTargetValid = isTargetCandidate && (oppTaunters.length === 0 || isTaunter);
+              const isTargetValid = isTargetCandidate && (p2Taunters.length === 0 || isTaunter);
+
+              const isP2Turn = !isPlayer1Turn;
+              const isP2Ready = !!(isP2Turn && creature && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen);
+              const isP2AttackerSelected = !!(creature && creature.instanceId === selectedAttackerId && isP2Turn);
+
+              const isP2Ascendable = !!(
+                isP2Turn &&
+                selectedCardInHand &&
+                creature &&
+                canAscendOnUnit(selectedCardInHand, creature) &&
+                calculateAscensionCost(selectedCardInHand, creature) <= activePlayer.mana
+              );
+              const p2EvoDiscount = isP2Ascendable && selectedCardInHand && creature
+                ? Math.max(0, selectedCardInHand.cost - calculateAscensionCost(selectedCardInHand, creature))
+                : 0;
+
+              const isRippleActive = dropImpactSlot?.player === 2 && dropImpactSlot?.lane === laneIdx;
 
               return (
                 <div
                   key={`p2_lane_${laneIdx}`}
-                  className={`creature-lane-slot w-[135px] h-[190px] rounded-xl border border-dashed flex items-center justify-center relative transition-all ${
+                  className={`creature-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border flex items-center justify-center relative transition-all cursor-pointer ${
                     creature
-                      ? 'border-transparent'
-                      : 'border-slate-800 bg-slate-950/30'
+                      ? isP2Ascendable
+                        ? 'border-amber-400 ring-2 ring-amber-400/70 shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                        : 'border-transparent'
+                      : selectedHandCardId && !isPlayer1Turn
+                      ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-400/50 animate-pulse'
+                      : 'border-dashed border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
                   }`}
+                  onClick={() => {
+                    if (isP2Turn) {
+                      if (!creature) handleLaneSlotClick(laneIdx, 2);
+                      else handleBoardCreatureClick(creature, 2, laneIdx);
+                    } else {
+                      if (creature) handleBoardCreatureClick(creature, 2, laneIdx);
+                    }
+                  }}
+                  onDragOver={e => {
+                    if (isP2Turn) e.preventDefault();
+                  }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    if (draggedCardId && isP2Turn) {
+                      dispatchAction({
+                        type: 'playCard',
+                        instanceId: draggedCardId,
+                        targetLaneIndex: laneIdx
+                      });
+                      clearSelections();
+                    }
+                  }}
                 >
+                  {isRippleActive && <div className="summon-ripple" />}
+
+                  {creature?.hasTaunt && (
+                    <div className="absolute -top-2.5 sm:-top-3 z-30 bg-rose-600 border border-rose-400 text-white px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black font-mono shadow-[0_0_12px_rgba(225,29,72,0.9)] flex items-center gap-0.5 sm:gap-1 pointer-events-none">
+                      <ShieldAlert className="w-2.5 h-2.5" />
+                      <span>TAUNT</span>
+                    </div>
+                  )}
+
+                  {isP2Ascendable && (
+                    <div className="absolute -top-3 sm:-top-3.5 z-30 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black font-mono shadow-[0_0_15px_rgba(245,158,11,0.9)] animate-bounce flex items-center gap-1 pointer-events-none">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      <span>EVOLVE (-{p2EvoDiscount}⚡)</span>
+                    </div>
+                  )}
+
                   {creature ? (
                     <Card
                       card={creature}
+                      size="sm"
                       isValidTarget={!!isTargetValid}
+                      isReadyToAttack={isP2Ready}
+                      isSelectedAttacker={isP2AttackerSelected}
+                      isAscensionCandidate={isP2Ascendable}
                       onInspect={onInspectCard}
                       onClick={() => handleBoardCreatureClick(creature, 2, laneIdx)}
                     />
                   ) : (
-                    <span className="lane-placeholder-num font-mono text-xl font-black text-slate-800 select-none">
+                    <span className="lane-placeholder-num font-mono text-base sm:text-xl font-black text-slate-800 select-none">
                       {laneIdx + 1}
                     </span>
                   )}
@@ -409,53 +637,110 @@ export function BattleArena({
           </div>
         </div>
 
+        {/* Center Battlefield Dividing Flank with Hearthstone Iconic End Turn Button */}
+        <div className="battlefield-center-flank flex items-center justify-end px-2 py-1 relative z-30">
+          <button
+            type="button"
+            disabled={gameState.winner !== null || activePlayer.isAI}
+            onClick={() => {
+              dispatchAction({ type: 'endTurn' });
+              clearSelections();
+              soundEngine.playTurnChime();
+            }}
+            className={`hearthstone-end-turn-btn px-4 sm:px-6 md:px-8 py-2 sm:py-3 text-xs sm:text-sm md:text-base font-black font-serif tracking-wider uppercase ${
+              activePlayer.isAI
+                ? 'opponent-turn opacity-70'
+                : 'text-yellow-100 animate-pulse'
+            }`}
+          >
+            {activePlayer.isAI ? 'ENEMY TURN' : `END TURN`}
+          </button>
+        </div>
+
         {/* =========================================================================
-            ACTIVE PLAYER ZONE (PLAYER 1)
+            PLAYER 1 ZONE (BOTTOM)
             ========================================================================= */}
-        <div className="player-mat-zone active-player-zone flex flex-col gap-2 relative z-10">
-          {/* Player 1 Lanes */}
-          <div className="lanes-container flex justify-center gap-3 py-1">
+        <div className="player-mat-zone p1-zone flex flex-col gap-1.5 relative z-10">
+          {/* Player 1 Battlefield Lanes */}
+          <div className="lanes-container p1-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
             {gameState.players[0].board.map((creature, laneIdx) => {
+              const isTargetCandidate = !!selectedAttackerId && !isPlayer1Turn;
+              const isTaunter = creature && creature.hasTaunt;
+              const isTargetValid = isTargetCandidate && (p1Taunters.length === 0 || isTaunter);
+
               const isTurn = isPlayer1Turn;
               const isReady = !!(isTurn && creature && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen);
-              const isAttackerSelected = !!(creature && creature.instanceId === selectedAttackerId);
+              const isAttackerSelected = !!(creature && creature.instanceId === selectedAttackerId && isTurn);
 
-              // Ascension candidate check
               const isAscendable = !!(
+                isTurn &&
                 selectedCardInHand &&
-                selectedCardInHand.type === 'creature' &&
-                selectedCardInHand.form &&
                 creature &&
-                creature.form &&
-                selectedCardInHand.form > creature.form &&
+                canAscendOnUnit(selectedCardInHand, creature) &&
                 calculateAscensionCost(selectedCardInHand, creature) <= activePlayer.mana
               );
+              const evoDiscount = isAscendable && selectedCardInHand && creature
+                ? Math.max(0, selectedCardInHand.cost - calculateAscensionCost(selectedCardInHand, creature))
+                : 0;
+
+              const isRippleActive = dropImpactSlot?.player === 1 && dropImpactSlot?.lane === laneIdx;
 
               return (
                 <div
                   key={`p1_lane_${laneIdx}`}
-                  className={`creature-lane-slot w-[135px] h-[190px] rounded-xl border flex items-center justify-center relative transition-all cursor-pointer ${
+                  className={`creature-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border flex items-center justify-center relative transition-all cursor-pointer ${
                     creature
-                      ? 'border-transparent'
+                      ? isAscendable
+                        ? 'border-amber-400 ring-2 ring-amber-400/70 shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                        : 'border-transparent'
                       : selectedHandCardId && isPlayer1Turn
-                      ? 'border-sky-500/60 bg-sky-950/30 ring-2 ring-sky-400/40 animate-pulse'
-                      : 'border-dashed border-slate-800 bg-slate-950/30 hover:border-slate-700'
+                      ? 'border-sky-500/80 bg-sky-950/30 ring-2 ring-sky-400/50 animate-pulse'
+                      : 'border-dashed border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
                   }`}
                   onClick={() => {
-                    if (!creature) handleLaneSlotClick(laneIdx, 1);
+                    if (isTurn) {
+                      if (!creature) handleLaneSlotClick(laneIdx, 1);
+                      else handleBoardCreatureClick(creature, 1, laneIdx);
+                    } else {
+                      if (creature) handleBoardCreatureClick(creature, 1, laneIdx);
+                    }
                   }}
-                  onDragOver={e => e.preventDefault()}
+                  onDragOver={e => {
+                    if (isTurn) e.preventDefault();
+                  }}
                   onDrop={e => {
                     e.preventDefault();
-                    if (draggedCardId && isPlayer1Turn) {
-                      setGameState(s => playCard(s, draggedCardId, laneIdx));
+                    if (draggedCardId && isTurn) {
+                      dispatchAction({
+                        type: 'playCard',
+                        instanceId: draggedCardId,
+                        targetLaneIndex: laneIdx
+                      });
                       clearSelections();
                     }
                   }}
                 >
+                  {isRippleActive && <div className="summon-ripple" />}
+
+                  {creature?.hasTaunt && (
+                    <div className="absolute -top-2.5 sm:-top-3 z-30 bg-rose-600 border border-rose-400 text-white px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black font-mono shadow-[0_0_12px_rgba(225,29,72,0.9)] flex items-center gap-0.5 sm:gap-1 pointer-events-none">
+                      <ShieldAlert className="w-2.5 h-2.5" />
+                      <span>TAUNT</span>
+                    </div>
+                  )}
+
+                  {isAscendable && (
+                    <div className="absolute -top-3 sm:-top-3.5 z-30 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black font-mono shadow-[0_0_15px_rgba(245,158,11,0.9)] animate-bounce flex items-center gap-1 pointer-events-none">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      <span>EVOLVE (-{evoDiscount}⚡)</span>
+                    </div>
+                  )}
+
                   {creature ? (
                     <Card
                       card={creature}
+                      size="sm"
+                      isValidTarget={!!isTargetValid}
                       isReadyToAttack={isReady}
                       isSelectedAttacker={isAttackerSelected}
                       isAscensionCandidate={isAscendable}
@@ -463,7 +748,7 @@ export function BattleArena({
                       onClick={() => handleBoardCreatureClick(creature, 1, laneIdx)}
                     />
                   ) : (
-                    <span className="lane-placeholder-num font-mono text-xl font-black text-slate-800 select-none">
+                    <span className="lane-placeholder-num font-mono text-base sm:text-xl font-black text-slate-800 select-none">
                       {laneIdx + 1}
                     </span>
                   )}
@@ -472,216 +757,206 @@ export function BattleArena({
             })}
           </div>
 
-          {/* Player 1 Hand */}
-          <div className="hand-container player-hand flex justify-center items-center gap-[-20px] min-h-[140px] py-1">
-            {gameState.players[0].hand.map((card, idx) => {
-              const isSelected = selectedHandCardId === card.instanceId;
-              const discount = selectedCardInHand ? 0 : 0;
+          {/* Player 1 Hand (Fanned Out with Hearthstone Arc & Green Playable Aura) */}
+          {isMobileHandExpanded && (
+            <div className="hand-container p1-hand flex justify-center items-center gap-[-14px] min-h-[105px] sm:min-h-[135px] py-1">
+              {gameState.players[0].hand.map((card, idx) => {
+                const isSelected = selectedHandCardId === card.instanceId && isPlayer1Turn;
+                const total = gameState.players[0].hand.length;
+                const mid = (total - 1) / 2;
+                const fanAngle = total > 1 ? (idx - mid) * 3 : 0;
+                const fanY = total > 1 ? Math.abs(idx - mid) * 2 : 0;
 
-              return (
-                <div
-                  key={card.instanceId || `p1_card_${idx}`}
-                  className={`transition-all -mx-2 hover:translate-y-[-16px] hover:scale-105 z-20 ${
-                    isSelected ? 'translate-y-[-24px] scale-110 z-30 ring-2 ring-amber-400 rounded-xl' : ''
-                  }`}
-                >
-                  <Card
-                    card={card}
-                    isFaceDown={false}
-                    draggable={isPlayer1Turn}
-                    equippedCardBack={equippedCosmetics?.cardBack}
-                    equippedFoilStyle={equippedCosmetics?.foilStyle}
-                    onDragStart={() => {
-                      setDraggedCardId(card.instanceId);
-                      setSelectedHandCardId(card.instanceId);
+                // Hearthstone Playable Green Glow: card cost <= mana and friendly turn
+                const isCardPlayable = !hideP1Hand && isPlayer1Turn && card.cost <= p1Mana;
+
+                return (
+                  <div
+                    key={card.instanceId || `p1_card_${idx}`}
+                    style={{
+                      transform: isSelected
+                        ? 'translateY(-24px) scale(1.15) rotate(0deg)'
+                        : `translateY(${fanY}px) rotate(${fanAngle}deg)`,
+                      transition: 'all 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                     }}
-                    onInspect={onInspectCard}
-                    onClick={() => handleCardClick(card, 1)}
-                    discountAmount={discount}
-                  />
-                </div>
-              );
-            })}
-          </div>
+                    className={`-mx-2 sm:-mx-2.5 z-20 hover:z-40 ${
+                      isSelected ? 'z-40 ring-2 ring-amber-400 rounded-xl' : ''
+                    }`}
+                  >
+                    <Card
+                      card={card}
+                      isFaceDown={hideP1Hand}
+                      size={isPlayer1Turn ? 'md' : 'sm'}
+                      isPlayable={isCardPlayable}
+                      draggable={isPlayer1Turn && !hideP1Hand}
+                      equippedCardBack={equippedCosmetics?.cardBack}
+                      equippedFoilStyle={equippedCosmetics?.foilStyle}
+                      onDragStart={() => {
+                        if (isPlayer1Turn && !hideP1Hand) {
+                          setDraggedCardId(card.instanceId);
+                          setSelectedHandCardId(card.instanceId);
+                        }
+                      }}
+                      onInspect={onInspectCard}
+                      onClick={() => {
+                        if (!hideP1Hand) handleCardClick(card, 1);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Player 1 Vanguard Row */}
-          <div className="mat-row flex flex-wrap items-center justify-between gap-3">
-            {/* Vanguard Box (P1) */}
+          {/* Player 1 Mat Row (Hearthstone Hero Portrait, Mana Tray, Wards) */}
+          <div className="mat-row flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap pt-1">
+            {/* Hearthstone Oval Hero Portrait Frame (P1) */}
             <div
-              className={`vanguard-box flex items-center gap-3 bg-slate-900/90 border rounded-xl p-2.5 min-w-[240px] md:min-w-[280px] shadow-lg transition-all ${
-                isPlayer1Turn
-                  ? 'border-sky-500/80 shadow-[0_0_18px_rgba(56,189,248,0.3)]'
-                  : 'border-slate-800'
+              className={`champion-portrait-wrap flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 to-slate-950 border-2 rounded-2xl p-1.5 sm:p-2 shadow-xl cursor-pointer transition-all ${
+                selectedAttackerId && !isPlayer1Turn && p1Taunters.length === 0
+                  ? 'border-red-500 ring-4 ring-red-500/60 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.7)]'
+                  : isPlayer1Turn
+                  ? 'border-amber-400/80 shadow-[0_0_18px_rgba(245,158,11,0.4)]'
+                  : 'border-slate-800 hover:border-slate-700'
               }`}
+              onClick={() => handleChampionClick(1)}
+              title={selectedAttackerId && !isPlayer1Turn ? 'Click to declare DIRECT ATTACK on enemy Champion!' : 'Champion Command Zone'}
             >
-              <div className="vanguard-avatar relative w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 shadow-md">
+              {/* Hearthstone Oval Hero Token */}
+              <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full overflow-hidden border-2 border-amber-400 shadow-md flex-shrink-0 bg-slate-950">
                 <Image
-                  src={gameState.players[0].vanguard.avatar}
-                  alt={gameState.players[0].vanguard.name}
+                  src={p1Champ.avatar}
+                  alt={p1Champ.name}
                   fill
-                  sizes="48px"
+                  sizes="52px"
                   priority
                   className="object-cover"
                 />
+                {/* Hearthstone Blood-Red Health Badge */}
+                <div className="absolute bottom-0 right-0 bg-gradient-to-br from-red-600 to-rose-700 text-white font-mono font-black text-[10px] sm:text-xs px-1.5 rounded-tl-md border-t border-l border-red-300 drop-shadow flex items-center justify-center">
+                  {p1Champ.hp}
+                </div>
               </div>
 
-              <div className="vanguard-info flex flex-col flex-1 gap-1">
-                <div className="vanguard-name text-xs md:text-sm font-bold text-slate-100 font-serif flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span>{gameState.players[0].name}</span>
-                    {totalSpentUSD > 0 && (
-                      <span
-                        className={`text-[9px] font-mono font-black px-1.5 py-0.2 rounded border ${getSupporterTier(totalSpentUSD).borderColor} ${getSupporterTier(totalSpentUSD).color} bg-slate-950`}
-                        title={getSupporterTier(totalSpentUSD).name}
-                      >
-                        {getSupporterTier(totalSpentUSD).badge.split(' ')[0]}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-amber-400 font-mono">({gameState.players[0].vanguard.name})</span>
-                </div>
-                <div className="vanguard-hp-bar-wrap w-full h-3 bg-rose-950/80 rounded-full overflow-hidden border border-rose-800/50 relative">
-                  <div
-                    className="vanguard-hp-fill h-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-300"
-                    style={{
-                      width: `${Math.max(0, Math.min(100, (gameState.players[0].vanguard.hp / gameState.players[0].vanguard.maxHp) * 100))}%`
-                    }}
-                  />
-                  <span className="vanguard-hp-text absolute inset-0 flex items-center justify-center text-[9px] font-black text-white font-mono drop-shadow">
-                    {gameState.players[0].vanguard.hp} / {gameState.players[0].vanguard.maxHp} HP
+              {/* Name & Supporter Badge */}
+              <div className="flex flex-col min-w-0 pr-1">
+                <div className="flex items-center gap-1">
+                  <Crown className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[90px] sm:max-w-[130px]">
+                    {gameState.players[0].name}
                   </span>
+                  {totalSpentUSD > 0 && (
+                    <span
+                      className={`text-[8px] font-mono font-black px-1 rounded border ${getSupporterTier(totalSpentUSD).borderColor} ${getSupporterTier(totalSpentUSD).color} bg-slate-950`}
+                      title={getSupporterTier(totalSpentUSD).name}
+                    >
+                      {getSupporterTier(totalSpentUSD).badge.split(' ')[0]}
+                    </span>
+                  )}
                 </div>
+                <span className="text-[10px] text-amber-300 font-mono truncate max-w-[90px] sm:max-w-[130px]">
+                  {p1Champ.name}
+                </span>
               </div>
 
-              {/* Hero Power Button (P1) */}
+              {/* Commander Power Medallion (P1) */}
               <button
                 type="button"
                 disabled={
-                  gameState.players[0].vanguard.heroPowerUsed ||
-                  gameState.players[0].mana < gameState.players[0].vanguard.heroPower.cost ||
+                  p1Champ.heroPowerUsed ||
+                  p1Mana < p1Champ.heroPower.cost ||
                   !isPlayer1Turn
                 }
                 onClick={() => {
-                  if (isPlayer1Turn) setGameState(s => activateHeroPower(s));
+                  if (isPlayer1Turn) dispatchAction({ type: 'activateHeroPower' });
                 }}
-                className={`hero-power-btn w-11 h-11 rounded-xl border flex flex-col items-center justify-center relative transition-all ${
-                  !gameState.players[0].vanguard.heroPowerUsed &&
-                  gameState.players[0].mana >= gameState.players[0].vanguard.heroPower.cost &&
+                className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
+                  !p1Champ.heroPowerUsed &&
+                  p1Mana >= p1Champ.heroPower.cost &&
                   isPlayer1Turn
-                    ? 'bg-gradient-to-br from-indigo-900 to-slate-900 border-sky-400 text-sky-200 hover:scale-105 shadow-[0_0_12px_rgba(56,189,248,0.5)] cursor-pointer'
+                    ? 'bg-gradient-to-br from-indigo-900 to-blue-900 border-amber-400 text-sky-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
                     : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
                 }`}
-                title={`${gameState.players[0].vanguard.heroPower.name} (2 Mana): ${gameState.players[0].vanguard.heroPower.desc}`}
+                title={`Commander Power (2 Mana): ${p1Champ.heroPower.name} - ${p1Champ.heroPower.desc}`}
               >
-                <Zap className="w-5 h-5 text-amber-400" />
-                <span className="hero-power-cost absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold border border-blue-300">
+                <Zap className="w-4 h-4 text-amber-300" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold border border-blue-300 shadow">
                   2
                 </span>
               </button>
             </div>
 
-            {/* Player 1 Wards */}
-            <div className="wards-container flex gap-2">
+            {/* Secret Wards (P1) */}
+            <div className="secret-wards-row flex items-center gap-1.5">
               {gameState.players[0].wards.map((ward, idx) => (
                 <div
                   key={`p1_ward_${idx}`}
-                  className={`ward-slot w-12 h-16 rounded-lg border flex flex-col items-center justify-center text-[10px] font-mono transition-all ${
+                  className={`ward-slot-chip w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center text-xs transition-all ${
                     ward
-                      ? 'border-purple-500/80 bg-purple-950/40 text-purple-300 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
+                      ? 'border-purple-500 bg-purple-950/80 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.6)] animate-pulse'
                       : 'border-dashed border-slate-800 bg-slate-950/40 text-slate-700'
                   }`}
                   title={ward ? `${ward.name}: ${ward.desc}` : 'Empty Ward Slot'}
                 >
                   <ShieldAlert className={`w-3.5 h-3.5 ${ward ? 'text-purple-400' : 'text-slate-700'}`} />
-                  <span>{ward ? ward.name.substring(0, 5) : '[+]'}</span>
                 </div>
               ))}
             </div>
 
-            {/* Player 1 Mana & Actions */}
-            <div className="flex items-center gap-3">
-              <div className="aether-meter-wrap flex items-center gap-2 bg-slate-950/70 border border-slate-800 px-3 py-1.5 rounded-xl">
-                <span className="aether-count-text font-mono text-xs font-bold text-sky-400">
-                  {p1Mana} / {p1MaxMana}
+            {/* Hearthstone Chunky Mana Tray & Piles (P1) */}
+            <div className="flex items-center gap-2">
+              <div className="mana-tray-hearthstone flex items-center gap-1.5 bg-slate-950/90 border border-sky-500/40 px-2.5 py-1 rounded-xl shadow-inner">
+                <span className="font-mono text-xs font-black text-sky-400 flex items-center gap-0.5">
+                  💎 {p1Mana}/{p1MaxMana}
                 </span>
-                <div className="aether-crystals-row flex gap-1">
+                <div className="hidden sm:flex gap-1">
                   {Array.from({ length: p1MaxMana }).map((_, i) => (
                     <div
                       key={`p1_gem_${i}`}
-                      className={`aether-gem w-2.5 h-3.5 rounded-sm border ${
+                      className={`w-2 h-3 rounded-xs border ${
                         i < p1Mana
-                          ? 'bg-gradient-to-b from-sky-400 to-blue-600 border-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.7)]'
-                          : 'bg-slate-800 border-slate-700'
+                          ? 'bg-gradient-to-b from-cyan-300 to-blue-600 border-cyan-200 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
+                          : 'bg-slate-800/60 border-slate-700'
                       }`}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="piles-group flex gap-2">
-                <div
-                  className="card-pile w-11 h-16 rounded-lg bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-[9px] font-mono text-slate-400 shadow-sm"
-                  title="Your Deck"
-                >
-                  <span>DECK</span>
-                  <span className="pile-count-badge font-bold text-slate-200 text-xs">
-                    {gameState.players[0].deck.length}
-                  </span>
+              {/* Piles */}
+              <div className="flex gap-1.5 text-[9px] font-mono">
+                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-[8px]">DECK</span>
+                  <span className="font-bold text-white text-[10px]">{gameState.players[0].deck.length}</span>
                 </div>
-                <div
-                  className="card-pile w-11 h-16 rounded-lg bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-[9px] font-mono text-slate-400 shadow-sm"
-                  title="Your Graveyard"
-                >
-                  <span>GRAVE</span>
-                  <span className="pile-count-badge font-bold text-slate-200 text-xs">
-                    {gameState.players[0].graveyard.length}
-                  </span>
+                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-[8px]">GRAVE</span>
+                  <span className="font-bold text-white text-[10px]">{gameState.players[0].graveyard.length}</span>
                 </div>
-              </div>
-
-              {/* End Turn Action Button */}
-              <div className="battle-actions-bar">
-                <button
-                  type="button"
-                  disabled={gameState.winner !== null || activePlayer.isAI}
-                  onClick={() => {
-                    setGameState(s => endTurn(s));
-                    clearSelections();
-                  }}
-                  className={`btn-end-turn px-6 py-3 rounded-xl font-bold font-mono tracking-wider transition-all shadow-lg ${
-                    activePlayer.isAI
-                      ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-500 hover:to-teal-500 hover:scale-105 shadow-[0_0_15px_rgba(16,185,129,0.4)] cursor-pointer'
-                  }`}
-                >
-                  {activePlayer.isAI ? 'AI Thinking...' : 'End Turn (Space)'}
-                </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Live Action Log Drawer (Top Left) */}
-        <div className="battle-log-pane absolute top-3 left-3 w-64 max-h-44 bg-slate-950/85 border border-slate-800/80 rounded-xl p-2.5 overflow-y-auto font-mono text-[11px] flex flex-col gap-1.5 backdrop-blur-md shadow-2xl z-30 pointer-events-auto">
-          {gameState.actionLogs.slice(0, 15).map(log => (
+        {/* Live Action Combat Log (Collapsible on mobile) */}
+        <div className="hidden md:flex battle-log-pane absolute top-3 left-3 w-60 max-h-40 bg-slate-950/85 border border-slate-800/80 rounded-xl p-2 overflow-y-auto font-mono text-[10px] flex-col gap-1 backdrop-blur-md shadow-2xl z-20 pointer-events-auto">
+          {gameState.actionLogs.slice(0, 10).map(log => (
             <div
               key={log.id}
-              className={`log-entry border-b border-slate-800/40 pb-1 ${
+              className={`log-entry px-1.5 py-0.5 rounded leading-tight ${
                 log.type === 'log-attack'
-                  ? 'text-rose-400'
-                  : log.type === 'log-summon'
-                  ? 'text-sky-300'
+                  ? 'text-rose-300 bg-rose-950/40 border-l-2 border-rose-500'
                   : log.type === 'log-ascend'
-                  ? 'text-amber-300 font-semibold'
+                  ? 'text-amber-300 bg-amber-950/40 border-l-2 border-amber-400'
                   : log.type === 'log-trap'
-                  ? 'text-purple-300 font-semibold'
+                  ? 'text-purple-300 bg-purple-950/40 border-l-2 border-purple-500'
                   : log.type === 'log-turn'
-                  ? 'text-emerald-300 font-bold'
-                  : 'text-slate-400'
+                  ? 'text-sky-300 bg-sky-950/40 border-l-2 border-sky-400 font-bold'
+                  : 'text-slate-400 bg-slate-900/30'
               }`}
             >
-              <span className="text-slate-500 mr-1" suppressHydrationWarning>[{log.time}]</span>
-              <span suppressHydrationWarning>{log.text}</span>
+              <span className="log-time text-slate-600 mr-1">[{log.time}]</span>
+              {log.text}
             </div>
           ))}
         </div>

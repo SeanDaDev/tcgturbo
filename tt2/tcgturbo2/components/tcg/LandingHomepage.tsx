@@ -21,11 +21,14 @@ import {
   Star
 } from 'lucide-react';
 
+import { CardDef } from '@/lib/tcg/types';
+
 interface LandingHomepageProps {
   onOpenShopModal?: () => void;
+  onInspectCard?: (card: CardDef) => void;
 }
 
-export function LandingHomepage({ onOpenShopModal }: LandingHomepageProps) {
+export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomepageProps) {
   const [selectedFaction, setSelectedFaction] = useState<'solar' | 'void' | 'verdant' | 'tide' | 'astral'>('solar');
 
   // Sample cards for 3D showcase
@@ -291,8 +294,8 @@ export function LandingHomepage({ onOpenShopModal }: LandingHomepageProps) {
             </div>
           </div>
 
-          <div className="z-10 scale-105 hover:scale-110 transition-transform">
-            <Card card={activeFaction.heroCard} size="lg" />
+          <div className="z-10 scale-105 hover:scale-110 transition-transform cursor-pointer">
+            <Card card={activeFaction.heroCard} size="lg" onInspect={onInspectCard} />
           </div>
         </div>
       </section>

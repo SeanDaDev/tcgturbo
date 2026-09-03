@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from '@/components/tcg/Header';
 import { BattleArena } from '@/components/tcg/BattleArena';
+import { DeckSelectLobby } from '@/components/tcg/DeckSelectLobby';
 import { DeckBuilder } from '@/components/tcg/DeckBuilder';
 import { CardAlmanac } from '@/components/tcg/CardAlmanac';
 import { RulesCodex } from '@/components/tcg/RulesCodex';
@@ -17,7 +18,7 @@ import {
   endTurn
 } from '@/lib/tcg/gameEngine';
 import { executeAiTurn } from '@/lib/tcg/aiPlayer';
-import { GameState, CardDef, CardInstance, GameMode } from '@/lib/tcg/types';
+import { GameState, CardDef, CardInstance } from '@/lib/tcg/types';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 
@@ -36,7 +37,6 @@ import {
 export default function SplitscreenPage() {
   const [activeTab, setActiveTab] = useState<'battle' | 'deckbuilder' | 'almanac' | 'lore'>('battle');
   const [gameTitle, setGameTitle] = useState<string>(GAME_TITLES[0]);
-  const [gameMode, setGameMode] = useState<GameMode>('couch_2p');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
 
@@ -56,6 +56,22 @@ export default function SplitscreenPage() {
   const [customP1Deck, setCustomP1Deck] = useState<string[] | undefined>(undefined);
   const [customP2Deck, setCustomP2Deck] = useState<string[] | undefined>(undefined);
 
+  // Deck Selection Lobby State (opens by default in Couch Co-Op)
+  const [isDeckSelectOpen, setIsDeckSelectOpen] = useState<boolean>(true);
+  const [privacyCurtainEnabled, setPrivacyCurtainEnabled] = useState<boolean>(true);
+
+  const [lastDeckConfig, setLastDeckConfig] = useState<{
+    p1DeckKey: string;
+    p2DeckKey: string;
+    p1Name: string;
+    p2Name: string;
+  }>({
+    p1DeckKey: 'solar_pyre',
+    p2DeckKey: 'void_shadow',
+    p1Name: 'Player 1',
+    p2Name: 'Player 2'
+  });
+
   const [gameState, setGameState] = useState<GameState>(() =>
     createInitialGame('couch_2p', 'solar_pyre', 'void_shadow')
   );
@@ -63,24 +79,54 @@ export default function SplitscreenPage() {
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
-  // New Duel Initializer
-  const handleStartNewDuel = useCallback(
-    (mode: GameMode = gameMode, p1Cards = customP1Deck, p2Cards = customP2Deck) => {
+  // Launch Couch Duel with Selected Decks
+  const handleStartCustomDuel = useCallback(
+    (config: {
+      p1DeckKey: string;
+      p2DeckKey: string;
+      p1Name: string;
+      p2Name: string;
+      privacyCurtain: boolean;
+      customP1Cards?: string[];
+      customP2Cards?: string[];
+    }) => {
       soundEngine.playTurnChime();
-      const newGame = createInitialGame(mode, 'solar_pyre', 'void_shadow', p1Cards, p2Cards);
+      setLastDeckConfig({
+        p1DeckKey: config.p1DeckKey,
+        p2DeckKey: config.p2DeckKey,
+        p1Name: config.p1Name,
+        p2Name: config.p2Name
+      });
+      setPrivacyCurtainEnabled(config.privacyCurtain);
+
+      const newGame = createInitialGame(
+        'couch_2p',
+        config.p1DeckKey,
+        config.p2DeckKey,
+        config.customP1Cards || customP1Deck,
+        config.customP2Cards || customP2Deck
+      );
+
+      newGame.players[0].name = config.p1Name;
+      newGame.players[1].name = config.p2Name;
+      newGame.players[1].isAI = false;
+
       setGameState(newGame);
+      setIsDeckSelectOpen(false);
       setActiveTab('battle');
     },
-    [gameMode, customP1Deck, customP2Deck]
+    [customP1Deck, customP2Deck]
   );
 
-  const handleSwitchGameMode = useCallback(
-    (mode: GameMode) => {
-      setGameMode(mode);
-      handleStartNewDuel(mode);
-    },
-    [handleStartNewDuel]
-  );
+  // Rematch with previous deck config
+  const handleRematch = useCallback(() => {
+    handleStartCustomDuel({
+      ...lastDeckConfig,
+      privacyCurtain: privacyCurtainEnabled,
+      customP1Cards: customP1Deck,
+      customP2Cards: customP2Deck
+    });
+  }, [handleStartCustomDuel, lastDeckConfig, privacyCurtainEnabled, customP1Deck, customP2Deck]);
 
   // Victory Reward listener
   const rewardedRef = useRef<boolean>(false);
@@ -127,7 +173,8 @@ export default function SplitscreenPage() {
           isShopModalOpen ||
           isProfileModalOpen ||
           inspectedCard ||
-          activeTab !== 'battle'
+          activeTab !== 'battle' ||
+          isDeckSelectOpen
         ) {
           return;
         }
@@ -137,7 +184,12 @@ export default function SplitscreenPage() {
           if (current.isPrivacyCurtainActive) {
             return revealPrivacyAndStartTurn(current);
           } else if (!current.players[current.currentTurn - 1].isAI) {
-            return endTurn(current);
+            const next = endTurn(current);
+            // Only activate privacy curtain if enabled in match settings
+            if (!privacyCurtainEnabled) {
+              return { ...next, isPrivacyCurtainActive: false };
+            }
+            return next;
           }
           return current;
         });
@@ -152,7 +204,16 @@ export default function SplitscreenPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPackModalOpen, isTradeModalOpen, isShopModalOpen, isProfileModalOpen, inspectedCard, activeTab]);
+  }, [
+    isPackModalOpen,
+    isTradeModalOpen,
+    isShopModalOpen,
+    isProfileModalOpen,
+    inspectedCard,
+    activeTab,
+    isDeckSelectOpen,
+    privacyCurtainEnabled
+  ]);
 
   return (
     <div id="app" className="relative flex flex-col min-h-screen w-full bg-[#080911] text-slate-100 overflow-x-hidden">
@@ -162,7 +223,12 @@ export default function SplitscreenPage() {
       {/* Top Header Navigation & Utilities */}
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={tab => {
+          setActiveTab(tab);
+          if (tab !== 'battle') {
+            setIsDeckSelectOpen(false);
+          }
+        }}
         gameTitle={gameTitle}
         setGameTitle={setGameTitle}
         isMuted={isMuted}
@@ -177,16 +243,27 @@ export default function SplitscreenPage() {
       />
 
       {/* Main View Container */}
-      <main className="flex-1 flex flex-col w-full relative z-10">
+      <main className="flex-1 flex flex-col w-full relative z-10 py-2">
         {activeTab === 'battle' && (
-          <BattleArena
-            gameState={gameState}
-            setGameState={setGameState}
-            onInspectCard={card => setInspectedCard(card)}
-            onNewDuel={() => handleSwitchGameMode(gameMode)}
-            equippedCosmetics={collection.equippedCosmetics}
-            totalSpentUSD={collection.totalSpentUSD}
-          />
+          <>
+            {isDeckSelectOpen ? (
+              <DeckSelectLobby
+                onStartGame={handleStartCustomDuel}
+                savedCustomP1Deck={customP1Deck}
+                savedCustomP2Deck={customP2Deck}
+              />
+            ) : (
+              <BattleArena
+                gameState={gameState}
+                setGameState={setGameState}
+                onInspectCard={card => setInspectedCard(card)}
+                onNewDuel={handleRematch}
+                onChangeDecks={() => setIsDeckSelectOpen(true)}
+                equippedCosmetics={collection.equippedCosmetics}
+                totalSpentUSD={collection.totalSpentUSD}
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'deckbuilder' && (
@@ -200,7 +277,14 @@ export default function SplitscreenPage() {
             }}
             onTestBattle={cards => {
               setCustomP1Deck(cards);
-              handleStartNewDuel(gameMode, cards, customP2Deck);
+              handleStartCustomDuel({
+                p1DeckKey: 'custom',
+                p2DeckKey: 'void_shadow',
+                p1Name: 'Player 1',
+                p2Name: 'AI Tactician',
+                privacyCurtain: false,
+                customP1Cards: cards
+              });
             }}
           />
         )}
@@ -213,11 +297,13 @@ export default function SplitscreenPage() {
       </main>
 
       {/* Privacy Curtain Overlay for Pass-the-Device Local 2P */}
-      <PrivacyCurtainModal
-        isOpen={gameState.isPrivacyCurtainActive}
-        playerName={gameState.players[gameState.currentTurn - 1].name}
-        onRevealAndStart={() => setGameState(s => revealPrivacyAndStartTurn(s))}
-      />
+      {privacyCurtainEnabled && (
+        <PrivacyCurtainModal
+          isOpen={gameState.isPrivacyCurtainActive && !isDeckSelectOpen}
+          playerName={gameState.players[gameState.currentTurn - 1].name}
+          onRevealAndStart={() => setGameState(s => revealPrivacyAndStartTurn(s))}
+        />
+      )}
 
       {/* Card Inspector Modal */}
       <CardInspectorModal
@@ -264,10 +350,10 @@ export default function SplitscreenPage() {
       {/* GameOver Modal */}
       <GameOverModal
         gameState={gameState}
-        onRematch={() => handleStartNewDuel()}
+        onRematch={handleRematch}
         onDeckBuilder={() => {
           setGameState(s => ({ ...s, winner: null }));
-          setActiveTab('deckbuilder');
+          setIsDeckSelectOpen(true);
         }}
       />
     </div>

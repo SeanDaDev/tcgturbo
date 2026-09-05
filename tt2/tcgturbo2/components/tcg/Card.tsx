@@ -160,7 +160,7 @@ export function Card({
           else if (onInspect) onInspect(card);
         }}
       >
-        <div className="card-inner">
+        <div className="card-inner pointer-events-none">
           {/* Holographic foil & glare dynamic shaders */}
           <div className={`card-foil foil-${equippedFoilStyle}`} />
           <div className="card-glare" />
@@ -183,7 +183,7 @@ export function Card({
             {onInspect && (
               <button
                 type="button"
-                className="card-inspect-btn"
+                className="card-inspect-btn pointer-events-auto"
                 title="Inspect Card & Lore (Right-Click / 🔍)"
                 onClick={e => {
                   e.stopPropagation();

@@ -607,6 +607,16 @@ export function playCard(
         isAscended: true
       };
 
+      // Trigger Ascension Burst Abilities
+      if (card.id === 'sol_paladin') {
+        // Ascension: Gain +2 ATK
+        ascendedUnit.currentAtk += 2;
+      } else if (card.id === 'nyx_valkyrie') {
+        // Ascension: Gain +2 HP
+        ascendedUnit.currentHp += 2;
+        ascendedUnit.maxHp += 2;
+      }
+
       nextBoard[lane] = ascendedUnit;
       nextState = logMessage(
         nextState,
@@ -623,7 +633,6 @@ export function playCard(
         ) as [PlayerState, PlayerState]
       };
 
-      // Trigger Ascension Burst Abilities
       if (card.id === 'ignis_apex') {
         // AoE 3 to all enemy units
         nextState = aoeDamageEnemies(nextState, opponentIndex, 3);

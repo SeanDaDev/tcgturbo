@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Header } from '@/components/tcg/Header';
+import { Header, MainNavTab } from '@/components/tcg/Header';
 import { BattleArena } from '@/components/tcg/BattleArena';
 import { DeckSelectLobby } from '@/components/tcg/DeckSelectLobby';
 import { DeckBuilder } from '@/components/tcg/DeckBuilder';
 import { CardAlmanac } from '@/components/tcg/CardAlmanac';
 import { RulesCodex } from '@/components/tcg/RulesCodex';
+import { ArcadeHub } from '@/components/arcade/ArcadeHub';
+import { CardOutfitterStudio } from '@/components/tcg/CardOutfitterStudio';
 import { PrivacyCurtainModal } from '@/components/tcg/PrivacyCurtainModal';
 import { CardInspectorModal } from '@/components/tcg/CardInspectorModal';
 import { GameOverModal } from '@/components/tcg/GameOverModal';
@@ -35,7 +37,7 @@ import {
 } from '@/lib/tcg/collectionEngine';
 
 export default function SplitscreenPage() {
-  const [activeTab, setActiveTab] = useState<'battle' | 'deckbuilder' | 'almanac' | 'lore'>('battle');
+  const [activeTab, setActiveTab] = useState<MainNavTab>('battle');
   const [gameTitle, setGameTitle] = useState<string>(GAME_TITLES[0]);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [inspectedCard, setInspectedCard] = useState<CardDef | CardInstance | null>(null);
@@ -294,6 +296,22 @@ export default function SplitscreenPage() {
         )}
 
         {activeTab === 'lore' && <RulesCodex />}
+
+        {activeTab === 'arcade' && (
+          <ArcadeHub
+            onLaunchGame={gameId => {
+              if (gameId === 'tcg_turbo') {
+                setActiveTab('battle');
+              }
+            }}
+          />
+        )}
+
+        {activeTab === 'outfitter' && (
+          <CardOutfitterStudio
+            onInspectCard={card => setInspectedCard(card)}
+          />
+        )}
       </main>
 
       {/* Privacy Curtain Overlay for Pass-the-Device Local 2P */}

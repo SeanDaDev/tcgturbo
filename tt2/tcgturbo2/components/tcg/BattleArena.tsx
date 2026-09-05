@@ -208,16 +208,27 @@ export function BattleArena({
           setSelectedAttackerId(creature.instanceId);
           soundEngine.playHover();
         }
+      } else if (!activePlayer.isAI) {
+        soundEngine.playTrap();
       }
     } else {
       // Opponent creature clicked as attack target
       if (selectedAttackerId) {
-        dispatchAction({
-          type: 'declareAttack',
-          attackerInstanceId: selectedAttackerId,
-          targetType: 'creature',
-          targetLaneOrId: laneIdx
-        });
+        if (laneIdx === -1) {
+          dispatchAction({
+            type: 'declareAttack',
+            attackerInstanceId: selectedAttackerId,
+            targetType: 'champion_lane',
+            targetLaneOrId: null
+          });
+        } else {
+          dispatchAction({
+            type: 'declareAttack',
+            attackerInstanceId: selectedAttackerId,
+            targetType: 'creature',
+            targetLaneOrId: laneIdx
+          });
+        }
         clearSelections();
       }
     }
@@ -228,6 +239,10 @@ export function BattleArena({
 
     // Direct strike against opponent Champion Commander
     if (selectedAttackerId && gameState.currentTurn !== targetPlayerId) {
+      const oppTaunters = targetPlayerId === 1 ? p1Taunters : p2Taunters;
+      if (oppTaunters.length > 0) {
+        soundEngine.playTrap();
+      }
       dispatchAction({
         type: 'declareAttack',
         attackerInstanceId: selectedAttackerId,
@@ -621,13 +636,6 @@ export function BattleArena({
                       isReadyToAttack={isP2Turn && p2ChampLane.canAttack && !p2ChampLane.hasAttackedThisTurn && !p2ChampLane.frozen}
                       isSelectedAttacker={p2ChampLane.instanceId === selectedAttackerId && isP2Turn}
                       onInspect={onInspectCard}
-                      onClick={() => {
-                        if (isP2Turn) handleBoardCreatureClick(p2ChampLane, 2, -1);
-                        else if (selectedAttackerId && isPlayer1Turn) {
-                          dispatchAction({ type: 'declareAttack', attackerInstanceId: selectedAttackerId, targetType: 'champion_lane' });
-                          clearSelections();
-                        }
-                      }}
                     />
                   ) : (
                     <div className="flex flex-col items-center gap-1 text-amber-400/60 p-1 text-center select-none">
@@ -923,13 +931,6 @@ export function BattleArena({
                       isReadyToAttack={isTurn && p1ChampLane.canAttack && !p1ChampLane.hasAttackedThisTurn && !p1ChampLane.frozen}
                       isSelectedAttacker={p1ChampLane.instanceId === selectedAttackerId && isTurn}
                       onInspect={onInspectCard}
-                      onClick={() => {
-                        if (isTurn) handleBoardCreatureClick(p1ChampLane, 1, -1);
-                        else if (selectedAttackerId && !isPlayer1Turn) {
-                          dispatchAction({ type: 'declareAttack', attackerInstanceId: selectedAttackerId, targetType: 'champion_lane' });
-                          clearSelections();
-                        }
-                      }}
                     />
                   ) : (
                     <div className="flex flex-col items-center gap-1 text-amber-400/60 p-1 text-center select-none">

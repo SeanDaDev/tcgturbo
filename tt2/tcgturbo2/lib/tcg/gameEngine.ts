@@ -1,5 +1,5 @@
 import { CARDS_DATA } from './cardsData';
-import { CHAMPIONS_DATA, VANGUARDS_DATA } from './vanguardsData';
+import { CHAMPIONS_DATA, VANGUARDS_DATA, getChampionCardDef } from './vanguardsData';
 import { PRESET_DECKS } from './presetDecks';
 import { soundEngine } from './soundEngine';
 import {
@@ -66,6 +66,9 @@ export function createPlayer(
     heroPowerUsed: false
   };
 
+  const championCardDef = getChampionCardDef(champInst);
+  const championCardInstance = instantiateCard(championCardDef);
+
   return {
     id,
     name,
@@ -75,8 +78,9 @@ export function createPlayer(
     mana: 1,
     maxMana: 1,
     deck,
-    hand: [],
+    hand: [championCardInstance],
     board: [null, null, null, null, null],
+    championLane: null,
     wards: [null, null, null],
     graveyard: [],
     extraTurns: 0
@@ -265,6 +269,30 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
     };
   });
 
+  let nextChampLane = active.championLane;
+  if (nextChampLane) {
+    let currentHp = nextChampLane.currentHp;
+    if (nextChampLane.keywords?.includes('Regen') && currentHp < nextChampLane.maxHp) {
+      currentHp = Math.min(nextChampLane.maxHp, currentHp + 2);
+    }
+    if (nextChampLane.frozen) {
+      nextChampLane = {
+        ...nextChampLane,
+        currentHp,
+        frozen: false,
+        canAttack: false,
+        hasAttackedThisTurn: false
+      };
+    } else {
+      nextChampLane = {
+        ...nextChampLane,
+        currentHp,
+        canAttack: true,
+        hasAttackedThisTurn: false
+      };
+    }
+  }
+
   let nextState: GameState = {
     ...state,
     phase: 'main',
@@ -276,6 +304,7 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
             maxMana: nextMax,
             mana: nextMax,
             board: nextBoard,
+            championLane: nextChampLane,
             champion: {
               ...(p.champion || p.vanguard),
               heroPowerUsed: false
@@ -326,7 +355,7 @@ export function calculateAscensionCost(
 export function playCard(
   state: GameState,
   instanceId: string,
-  targetLaneIndex: number | null = null,
+  targetLaneIndex: number | 'champion' | null = null,
   targetUnitId: string | null = null
 ): GameState {
   if (state.winner) return state;
@@ -340,8 +369,53 @@ export function playCard(
 
   const card = active.hand[cardIndex];
 
+  // Dedicated Champion Lane play
+  const isChampionCard = targetLaneIndex === 'champion' || card.id.includes('_champion') || card.desc?.includes('Dedicated Champion Lane');
+
+  if (isChampionCard) {
+    if (active.championLane !== null) {
+      return logMessage(state, 'Dedicated Champion Lane is already occupied!', 'log-trap');
+    }
+    const currentMana = active.mana ?? 0;
+    if (currentMana < card.cost) {
+      return logMessage(state, `Not enough Mana! Champion requires ${card.cost} Mana.`, 'log-trap');
+    }
+
+    const nextHand = active.hand.filter((_, idx) => idx !== cardIndex);
+    const nextMana = currentMana - card.cost;
+    const champUnit: CardInstance = {
+      ...card,
+      canAttack: !!card.canAttackOnSummon,
+      hasAttackedThisTurn: false,
+      frozen: false
+    };
+
+    soundEngine.playSummon();
+    let nextState: GameState = {
+      ...state,
+      players: state.players.map((p, idx) =>
+        idx === activeIndex
+          ? {
+              ...p,
+              mana: nextMana,
+              hand: nextHand,
+              championLane: champUnit
+            }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+
+    nextState = logMessage(
+      nextState,
+      `${active.name} summoned Champion ${card.name} into the Dedicated Champion Lane!`,
+      'log-summon'
+    );
+
+    return checkWinCondition(nextState);
+  }
+
   // Check lane & ascension
-  let lane = targetLaneIndex;
+  let lane: number | null = typeof targetLaneIndex === 'number' ? targetLaneIndex : null;
   if (lane === null || lane < 0 || lane > 4) {
     lane = active.board.findIndex(slot => slot === null);
   }
@@ -548,7 +622,7 @@ export function playCard(
 export function declareAttack(
   state: GameState,
   attackerInstanceId: string,
-  targetType: 'champion' | 'vanguard' | 'creature',
+  targetType: 'champion' | 'vanguard' | 'creature' | 'champion_lane',
   targetLaneOrId: number | string | null = null
 ): GameState {
   if (state.winner) return state;
@@ -558,14 +632,25 @@ export function declareAttack(
   const active = state.players[activeIndex];
   const opponent = state.players[opponentIndex];
 
-  const attackerLane = active.board.findIndex(c => c && c.instanceId === attackerInstanceId);
-  if (attackerLane === -1) return state;
-  const attacker = active.board[attackerLane];
+  let attackerLane = active.board.findIndex(c => c && c.instanceId === attackerInstanceId);
+  let isAttackerInChampLane = false;
+  let attacker: CardInstance | null = null;
+
+  if (attackerLane !== -1) {
+    attacker = active.board[attackerLane];
+  } else if (active.championLane && active.championLane.instanceId === attackerInstanceId) {
+    attacker = active.championLane;
+    isAttackerInChampLane = true;
+  }
+
   if (!attacker || !attacker.canAttack || attacker.hasAttackedThisTurn || attacker.frozen) {
     return logMessage(state, `${attacker?.name || 'Creature'} cannot attack right now!`, 'log-trap');
   }
 
-  const tauntCreatures = opponent.board.filter(c => c && c.hasTaunt);
+  const tauntCreatures = [
+    ...opponent.board.filter(c => c && c.hasTaunt),
+    ...(opponent.championLane && opponent.championLane.hasTaunt ? [opponent.championLane] : [])
+  ];
 
   // 1. ATTACK ENEMY CHAMPION (COMMANDER)
   if (targetType === 'champion' || targetType === 'vanguard') {
@@ -584,7 +669,7 @@ export function declareAttack(
       soundEngine.playTrap();
       let s = logMessage(wardState, `Direct strike negated by Secret Ward!`, 'log-trap');
       // Attacker exhausts
-      s = exhaustCreature(s, activeIndex, attackerLane);
+      s = exhaustCreature(s, activeIndex, isAttackerInChampLane ? 'champion' : attackerLane);
       return s;
     }
 
@@ -626,7 +711,7 @@ export function declareAttack(
       nextState = checkLethalWard(nextState, opponentIndex);
     }
 
-    nextState = exhaustCreature(nextState, activeIndex, attackerLane);
+    nextState = exhaustCreature(nextState, activeIndex, isAttackerInChampLane ? 'champion' : attackerLane);
     return checkWinCondition(nextState);
   }
 
@@ -733,21 +818,37 @@ export function declareAttack(
       };
     }
 
+    let nextActiveChampLane = nextState.players[activeIndex].championLane;
+
     if (attackerHp <= 0) {
-      nextActiveBoard[attackerLane] = null;
+      if (isAttackerInChampLane) {
+        nextActiveChampLane = null;
+      } else if (attackerLane >= 0) {
+        nextActiveBoard[attackerLane] = null;
+      }
       nextActiveGrave.push(liveAttacker);
       nextState = logMessage(nextState, `${liveAttacker.name} was destroyed!`, 'log-attack');
       if (liveAttacker.keywords?.includes('Deathrattle') || liveAttacker.id === 'void_stalker') {
         nextState = drawCardInternal(nextState, (activeIndex + 1) as 1 | 2);
       }
     } else {
-      nextActiveBoard[attackerLane] = {
-        ...liveAttacker,
-        currentHp: attackerHp,
-        hasAegis: attHasAegis,
-        canAttack: false,
-        hasAttackedThisTurn: true
-      };
+      if (isAttackerInChampLane) {
+        nextActiveChampLane = {
+          ...liveAttacker,
+          currentHp: attackerHp,
+          hasAegis: attHasAegis,
+          canAttack: false,
+          hasAttackedThisTurn: true
+        };
+      } else if (attackerLane >= 0) {
+        nextActiveBoard[attackerLane] = {
+          ...liveAttacker,
+          currentHp: attackerHp,
+          hasAegis: attHasAegis,
+          canAttack: false,
+          hasAttackedThisTurn: true
+        };
+      }
     }
 
     if (liveAttacker.lifesteal) {
@@ -758,10 +859,83 @@ export function declareAttack(
       ...nextState,
       players: nextState.players.map((p, idx) => {
         if (idx === activeIndex) {
-          return { ...p, board: nextActiveBoard, graveyard: nextActiveGrave };
+          return { ...p, board: nextActiveBoard, championLane: nextActiveChampLane, graveyard: nextActiveGrave };
         }
         if (idx === opponentIndex) {
           return { ...p, board: nextOppBoard, graveyard: nextOppGrave };
+        }
+        return p;
+      }) as [PlayerState, PlayerState]
+    };
+
+    return checkWinCondition(nextState);
+  }
+
+  // 3. ATTACK ENEMY CHAMPION IN CHAMPION LANE
+  if (targetType === 'champion_lane') {
+    const defender = opponent.championLane;
+    if (!defender) return state;
+
+    if (defender.keywords?.includes('Stealth')) {
+      return logMessage(state, `${defender.name} has Stealth and cannot be targeted!`, 'log-trap');
+    }
+
+    if (tauntCreatures.length > 0 && !defender.hasTaunt) {
+      return logMessage(state, `Must attack the Taunt guardian first!`, 'log-trap');
+    }
+
+    let nextState = checkAndTriggerWards(state, opponentIndex, 'on_creature_attack', attacker);
+    soundEngine.playAttack();
+
+    nextState = logMessage(
+      nextState,
+      `${attacker.name} attacks Champion ${defender.name} in Champion Lane!`,
+      'log-attack'
+    );
+
+    let defenderHp = defender.currentHp - attacker.currentAtk;
+    let attackerHp = attacker.currentHp - defender.currentAtk;
+
+    const nextActiveBoard = [...nextState.players[activeIndex].board];
+    let nextActiveChampLane = nextState.players[activeIndex].championLane;
+    const nextOppBoard = [...nextState.players[opponentIndex].board];
+    let nextOppChampLane = nextState.players[opponentIndex].championLane;
+
+    const nextActiveGrave = [...nextState.players[activeIndex].graveyard];
+    const nextOppGrave = [...nextState.players[opponentIndex].graveyard];
+
+    if (defenderHp <= 0) {
+      nextOppChampLane = null;
+      nextOppGrave.push(defender);
+      nextState = logMessage(nextState, `Champion ${defender.name} was defeated and sent to Graveyard!`, 'log-attack');
+    } else {
+      nextOppChampLane = { ...defender, currentHp: defenderHp };
+    }
+
+    if (attackerHp <= 0) {
+      if (isAttackerInChampLane) {
+        nextActiveChampLane = null;
+      } else if (attackerLane >= 0) {
+        nextActiveBoard[attackerLane] = null;
+      }
+      nextActiveGrave.push(attacker);
+      nextState = logMessage(nextState, `${attacker.name} was destroyed!`, 'log-attack');
+    } else {
+      if (isAttackerInChampLane) {
+        nextActiveChampLane = { ...attacker, currentHp: attackerHp, canAttack: false, hasAttackedThisTurn: true };
+      } else if (attackerLane >= 0) {
+        nextActiveBoard[attackerLane] = { ...attacker, currentHp: attackerHp, canAttack: false, hasAttackedThisTurn: true };
+      }
+    }
+
+    nextState = {
+      ...nextState,
+      players: nextState.players.map((p, idx) => {
+        if (idx === activeIndex) {
+          return { ...p, board: nextActiveBoard, championLane: nextActiveChampLane, graveyard: nextActiveGrave };
+        }
+        if (idx === opponentIndex) {
+          return { ...p, board: nextOppBoard, championLane: nextOppChampLane, graveyard: nextOppGrave };
         }
         return p;
       }) as [PlayerState, PlayerState]
@@ -879,6 +1053,44 @@ export function revealPrivacyAndStartTurn(state: GameState): GameState {
     ...state,
     isPrivacyCurtainActive: false
   });
+}
+
+function exhaustCreature(
+  state: GameState,
+  playerIndex: number,
+  laneIndex: number | 'champion'
+): GameState {
+  const player = state.players[playerIndex];
+  if (laneIndex === 'champion') {
+    if (!player.championLane) return state;
+    return {
+      ...state,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex
+          ? {
+              ...p,
+              championLane: { ...p.championLane!, canAttack: false, hasAttackedThisTurn: true }
+            }
+          : p
+      ) as [PlayerState, PlayerState]
+    };
+  }
+
+  const nextBoard = [...player.board];
+  if (typeof laneIndex === 'number' && laneIndex >= 0 && nextBoard[laneIndex]) {
+    nextBoard[laneIndex] = {
+      ...nextBoard[laneIndex]!,
+      canAttack: false,
+      hasAttackedThisTurn: true
+    };
+  }
+
+  return {
+    ...state,
+    players: state.players.map((p, idx) =>
+      idx === playerIndex ? { ...p, board: nextBoard } : p
+    ) as [PlayerState, PlayerState]
+  };
 }
 
 export function checkWinCondition(state: GameState): GameState {

@@ -43,11 +43,11 @@ export function BattleArena({
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Fancy Effects: Screen shake, summon impact ripples, mobile drawer
   const [screenShake, setScreenShake] = useState<boolean>(false);
   const [dropImpactSlot, setDropImpactSlot] = useState<{ player: 1 | 2; lane: number } | null>(null);
   const [isMobileHandExpanded, setIsMobileHandExpanded] = useState<boolean>(true);
   const [combatFlash, setCombatFlash] = useState<string | null>(null);
+  const [viewingGraveyardPlayer, setViewingGraveyardPlayer] = useState<1 | 2 | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -483,10 +483,15 @@ export function BattleArena({
                   <span className="text-[8px]">DECK</span>
                   <span className="font-bold text-white text-[10px]">{gameState.players[1].deck.length}</span>
                 </div>
-                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
-                  <span className="text-[8px]">GRAVE</span>
+                <button
+                  type="button"
+                  onClick={() => setViewingGraveyardPlayer(2)}
+                  className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-purple-900/60 hover:border-purple-400 flex flex-col items-center justify-center text-purple-300 transition-colors cursor-pointer shadow"
+                  title="View Player 2 Graveyard"
+                >
+                  <span className="text-[8px] flex items-center gap-0.5">🪦 GRAVE</span>
                   <span className="font-bold text-white text-[10px]">{gameState.players[1].graveyard.length}</span>
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -540,8 +545,81 @@ export function BattleArena({
             })}
           </div>
 
-          {/* Player 2 Battlefield Lanes (Responsive Mobile Touch + Desktop Drag/Drop) */}
+          {/* Player 2 Battlefield Lanes */}
           <div className="lanes-container p2-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
+            {/* Player 2 Dedicated Champion Lane Slot */}
+            {(() => {
+              const p2ChampLane = gameState.players[1].championLane;
+              const isP2Turn = !isPlayer1Turn;
+              const isChampPlayable = selectedHandCardId && isP2Turn && (selectedCardInHand?.id.includes('_champion') || selectedCardInHand?.desc?.includes('Dedicated Champion Lane'));
+
+              return (
+                <div
+                  className={`creature-lane-slot champion-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 flex items-center justify-center relative transition-all cursor-pointer ${
+                    p2ChampLane
+                      ? 'border-amber-400 bg-gradient-to-b from-amber-950/40 via-slate-900 to-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                      : isChampPlayable
+                      ? 'border-amber-400 bg-amber-950/40 ring-2 ring-amber-400/70 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.8)]'
+                      : 'border-dashed border-amber-500/40 bg-slate-950/60 hover:border-amber-400/70'
+                  }`}
+                  onClick={() => {
+                    if (isP2Turn) {
+                      if (!p2ChampLane && selectedHandCardId) {
+                        dispatchAction({ type: 'playCard', instanceId: selectedHandCardId, targetLaneIndex: 'champion' });
+                        clearSelections();
+                      } else if (p2ChampLane) {
+                        handleBoardCreatureClick(p2ChampLane, 2, -1);
+                      }
+                    } else if (p2ChampLane && selectedAttackerId && isPlayer1Turn) {
+                      dispatchAction({
+                        type: 'declareAttack',
+                        attackerInstanceId: selectedAttackerId,
+                        targetType: 'champion_lane',
+                        targetLaneOrId: null
+                      });
+                      clearSelections();
+                    }
+                  }}
+                  onDragOver={e => { if (isP2Turn) e.preventDefault(); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    if (draggedCardId && isP2Turn) {
+                      dispatchAction({ type: 'playCard', instanceId: draggedCardId, targetLaneIndex: 'champion' });
+                      clearSelections();
+                    }
+                  }}
+                  title="Dedicated Champion Lane"
+                >
+                  <div className="absolute -top-2.5 sm:-top-3 z-30 bg-amber-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
+                    <Crown className="w-2.5 h-2.5" />
+                    <span>CHAMPION</span>
+                  </div>
+
+                  {p2ChampLane ? (
+                    <Card
+                      card={p2ChampLane}
+                      size="sm"
+                      isValidTarget={!!selectedAttackerId && isPlayer1Turn}
+                      isReadyToAttack={isP2Turn && p2ChampLane.canAttack && !p2ChampLane.hasAttackedThisTurn && !p2ChampLane.frozen}
+                      isSelectedAttacker={p2ChampLane.instanceId === selectedAttackerId && isP2Turn}
+                      onInspect={onInspectCard}
+                      onClick={() => {
+                        if (isP2Turn) handleBoardCreatureClick(p2ChampLane, 2, -1);
+                        else if (selectedAttackerId && isPlayer1Turn) {
+                          dispatchAction({ type: 'declareAttack', attackerInstanceId: selectedAttackerId, targetType: 'champion_lane' });
+                          clearSelections();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-amber-400/60 p-1 text-center select-none">
+                      <Crown className="w-5 h-5 sm:w-7 sm:h-7" />
+                      <span className="text-[8px] sm:text-[10px] font-mono font-bold leading-tight">Champion Lane</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {gameState.players[1].board.map((creature, laneIdx) => {
               const isTargetCandidate = !!selectedAttackerId && isPlayer1Turn;
               const isTaunter = creature && creature.hasTaunt;
@@ -663,6 +741,79 @@ export function BattleArena({
         <div className="player-mat-zone p1-zone flex flex-col gap-1.5 relative z-10">
           {/* Player 1 Battlefield Lanes */}
           <div className="lanes-container p1-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
+            {/* Player 1 Dedicated Champion Lane Slot */}
+            {(() => {
+              const p1ChampLane = gameState.players[0].championLane;
+              const isTurn = isPlayer1Turn;
+              const isChampPlayable = selectedHandCardId && isTurn && (selectedCardInHand?.id.includes('_champion') || selectedCardInHand?.desc?.includes('Dedicated Champion Lane'));
+
+              return (
+                <div
+                  className={`creature-lane-slot champion-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 flex items-center justify-center relative transition-all cursor-pointer ${
+                    p1ChampLane
+                      ? 'border-amber-400 bg-gradient-to-b from-amber-950/40 via-slate-900 to-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                      : isChampPlayable
+                      ? 'border-amber-400 bg-amber-950/40 ring-2 ring-amber-400/70 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.8)]'
+                      : 'border-dashed border-amber-500/40 bg-slate-950/60 hover:border-amber-400/70'
+                  }`}
+                  onClick={() => {
+                    if (isTurn) {
+                      if (!p1ChampLane && selectedHandCardId) {
+                        dispatchAction({ type: 'playCard', instanceId: selectedHandCardId, targetLaneIndex: 'champion' });
+                        clearSelections();
+                      } else if (p1ChampLane) {
+                        handleBoardCreatureClick(p1ChampLane, 1, -1);
+                      }
+                    } else if (p1ChampLane && selectedAttackerId && !isPlayer1Turn) {
+                      dispatchAction({
+                        type: 'declareAttack',
+                        attackerInstanceId: selectedAttackerId,
+                        targetType: 'champion_lane',
+                        targetLaneOrId: null
+                      });
+                      clearSelections();
+                    }
+                  }}
+                  onDragOver={e => { if (isTurn) e.preventDefault(); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    if (draggedCardId && isTurn) {
+                      dispatchAction({ type: 'playCard', instanceId: draggedCardId, targetLaneIndex: 'champion' });
+                      clearSelections();
+                    }
+                  }}
+                  title="Dedicated Champion Lane"
+                >
+                  <div className="absolute -top-2.5 sm:-top-3 z-30 bg-amber-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
+                    <Crown className="w-2.5 h-2.5" />
+                    <span>CHAMPION</span>
+                  </div>
+
+                  {p1ChampLane ? (
+                    <Card
+                      card={p1ChampLane}
+                      size="sm"
+                      isValidTarget={!!selectedAttackerId && !isPlayer1Turn}
+                      isReadyToAttack={isTurn && p1ChampLane.canAttack && !p1ChampLane.hasAttackedThisTurn && !p1ChampLane.frozen}
+                      isSelectedAttacker={p1ChampLane.instanceId === selectedAttackerId && isTurn}
+                      onInspect={onInspectCard}
+                      onClick={() => {
+                        if (isTurn) handleBoardCreatureClick(p1ChampLane, 1, -1);
+                        else if (selectedAttackerId && !isPlayer1Turn) {
+                          dispatchAction({ type: 'declareAttack', attackerInstanceId: selectedAttackerId, targetType: 'champion_lane' });
+                          clearSelections();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-amber-400/60 p-1 text-center select-none">
+                      <Crown className="w-5 h-5 sm:w-7 sm:h-7" />
+                      <span className="text-[8px] sm:text-[10px] font-mono font-bold leading-tight">Champion Lane</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {gameState.players[0].board.map((creature, laneIdx) => {
               const isTargetCandidate = !!selectedAttackerId && !isPlayer1Turn;
               const isTaunter = creature && creature.hasTaunt;
@@ -929,10 +1080,15 @@ export function BattleArena({
                   <span className="text-[8px]">DECK</span>
                   <span className="font-bold text-white text-[10px]">{gameState.players[0].deck.length}</span>
                 </div>
-                <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
-                  <span className="text-[8px]">GRAVE</span>
+                <button
+                  type="button"
+                  onClick={() => setViewingGraveyardPlayer(1)}
+                  className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-purple-900/60 hover:border-purple-400 flex flex-col items-center justify-center text-purple-300 transition-colors cursor-pointer shadow"
+                  title="View Player 1 Graveyard"
+                >
+                  <span className="text-[8px] flex items-center gap-0.5">🪦 GRAVE</span>
                   <span className="font-bold text-white text-[10px]">{gameState.players[0].graveyard.length}</span>
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -940,6 +1096,80 @@ export function BattleArena({
 
         {/* Live Action Combat Log (Collapsible on mobile) */}
         <div className="hidden md:flex battle-log-pane absolute top-3 left-3 w-60 max-h-40 bg-slate-950/85 border border-slate-800/80 rounded-xl p-2 overflow-y-auto font-mono text-[10px] flex-col gap-1 backdrop-blur-md shadow-2xl z-20 pointer-events-auto">
+          {gameState.actionLogs.slice(0, 10).map(log => (
+            <div
+              key={log.id}
+              className={`log-entry px-1.5 py-0.5 rounded leading-tight ${
+                log.type === 'log-attack'
+                  ? 'text-rose-300 bg-rose-950/40 border-l-2 border-rose-500'
+                  : log.type === 'log-ascend'
+                  ? 'text-amber-300 bg-amber-950/40 border-l-2 border-amber-400'
+                  : log.type === 'log-trap'
+                  ? 'text-purple-300 bg-purple-950/40 border-l-2 border-purple-500'
+                  : log.type === 'log-turn'
+                  ? 'text-sky-300 bg-sky-950/40 border-l-2 border-sky-400 font-bold'
+                  : 'text-slate-400 bg-slate-900/30'
+              }`}
+            >
+              <span className="log-time text-slate-600 mr-1">[{log.time}]</span>
+              {log.text}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Graveyard Inspector Modal */}
+      {viewingGraveyardPlayer !== null && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-purple-500/50 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between bg-slate-950 px-6 py-4 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-purple-300 font-bold font-serif text-lg">
+                <span>🪦</span>
+                <span>{gameState.players[viewingGraveyardPlayer - 1].name}&apos;s Graveyard</span>
+                <span className="text-xs font-mono bg-purple-950 border border-purple-600/40 text-purple-300 px-2.5 py-0.5 rounded-full">
+                  {gameState.players[viewingGraveyardPlayer - 1].graveyard.length} Cards Destroyed
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingGraveyardPlayer(null)}
+                className="text-slate-400 hover:text-white text-xl font-bold font-mono px-3 py-1 rounded-lg bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 flex flex-wrap justify-center gap-4">
+              {gameState.players[viewingGraveyardPlayer - 1].graveyard.length === 0 ? (
+                <div className="text-slate-500 font-mono text-sm py-12 text-center">
+                  No cards have been destroyed or sent to the Graveyard yet.
+                </div>
+              ) : (
+                gameState.players[viewingGraveyardPlayer - 1].graveyard.map((card, idx) => (
+                  <div key={`grave_card_${idx}_${card.instanceId}`} className="hover:scale-105 transition-transform cursor-pointer">
+                    <Card
+                      card={card}
+                      size="sm"
+                      onInspect={onInspectCard}
+                      onClick={() => onInspectCard(card)}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="bg-slate-950 px-6 py-3 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingGraveyardPlayer(null)}
+                className="btn btn-outline border-purple-500/50 text-purple-300 hover:bg-purple-950 px-5 py-1.5 text-xs font-mono"
+              >
+                Close Graveyard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
           {gameState.actionLogs.slice(0, 10).map(log => (
             <div
               key={log.id}

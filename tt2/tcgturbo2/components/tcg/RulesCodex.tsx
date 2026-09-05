@@ -69,20 +69,24 @@ export function RulesCodex() {
         {/* Visual Battlefield Layout Map */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
           <span className="text-xs uppercase font-mono tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
-            <Layers className="w-4 h-4" /> The 3 Battlefield Zones
+            <Layers className="w-4 h-4" /> The 4 Battlefield Zones & Graveyard
           </span>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
               <strong className="text-sky-300 block mb-1">1. Command Zone (Avatar)</strong>
-              <p className="text-slate-400">Houses your Champion Commander portrait, displays current HP (30), and provides access to your 2-Mana activated Hero Power.</p>
+              <p className="text-slate-400">Houses your Champion portrait (30 HP) and 2-Mana Hero Power.</p>
+            </div>
+            <div className="bg-slate-900/90 p-3 rounded-lg border border-amber-500/40">
+              <strong className="text-amber-300 block mb-1">2. Dedicated Champion Lane 👑</strong>
+              <p className="text-slate-400">A special dedicated lane for your Champion Commander card (5 Mana to summon).</p>
             </div>
             <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
-              <strong className="text-amber-300 block mb-1">2. Five Combat Lanes (Frontline)</strong>
-              <p className="text-slate-400">Each commander controls 5 dedicated combat lanes. Summoned Form I initiates and evolved Apex creatures occupy these lanes.</p>
+              <strong className="text-emerald-300 block mb-1">3. Five Combat Lanes (Frontline)</strong>
+              <p className="text-slate-400">5 standard creature lanes for initiates and evolved Apex titans.</p>
             </div>
-            <div className="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
-              <strong className="text-purple-300 block mb-1">3. Three Rune Slots (Backrow Wards)</strong>
-              <p className="text-slate-400">Facedown tactical trap slots. Wards cost 2 Mana to set and automatically spring when enemy conditions are met.</p>
+            <div className="bg-slate-900/90 p-3 rounded-lg border border-purple-500/40">
+              <strong className="text-purple-300 block mb-1">4. Wards & Graveyard 🪦</strong>
+              <p className="text-slate-400">3 secret Rune slots for traps + a viewable Graveyard for destroyed cards.</p>
             </div>
           </div>
         </div>
@@ -98,22 +102,22 @@ export function RulesCodex() {
             </div>
           </div>
 
-          <div className="codex-step-item flex gap-4 bg-slate-950/60 p-4 rounded-xl border-l-4 border-sky-400">
-            <span className="codex-step-num font-mono font-black text-sky-400 text-lg">02</span>
+          <div className="codex-step-item flex gap-4 bg-slate-950/60 p-4 rounded-xl border-l-4 border-amber-400">
+            <span className="codex-step-num font-mono font-black text-amber-400 text-lg">02</span>
             <div className="text-xs md:text-sm">
-              <strong className="text-white block mb-1">Starting Hand & Hand Limit (Overdraw Burn):</strong>
+              <strong className="text-white block mb-1">Starting Hand (4 Deck Cards + Champion Card):</strong>
               <p className="text-slate-400 leading-relaxed">
-                Both players draw an opening hand of <strong className="text-white">4 cards</strong>. Maximum hand size is strictly capped at <strong className="text-white">8 cards</strong>. If a card is drawn while holding 8 cards, it immediately burns and is placed into your Graveyard.
+                Both players start with an opening hand containing <strong className="text-white">4 deck cards PLUS their guaranteed Champion Card</strong> (5 cards total). Champion cards require 5 Mana to summon into the <strong className="text-amber-300">Dedicated Champion Lane</strong>.
               </p>
             </div>
           </div>
 
-          <div className="codex-step-item flex gap-4 bg-slate-950/60 p-4 rounded-xl border-l-4 border-sky-400">
-            <span className="codex-step-num font-mono font-black text-sky-400 text-lg">03</span>
+          <div className="codex-step-item flex gap-4 bg-slate-950/60 p-4 rounded-xl border-l-4 border-purple-400">
+            <span className="codex-step-num font-mono font-black text-purple-400 text-lg">03</span>
             <div className="text-xs md:text-sm">
-              <strong className="text-white block mb-1">Deck Depletion & Fatigue Damage:</strong>
+              <strong className="text-white block mb-1">Graveyard System & Hand Overdraw:</strong>
               <p className="text-slate-400 leading-relaxed">
-                There is no auto-loss upon running out of cards. However, if you are forced to draw when your deck has 0 cards remaining, your Champion Commander suffers <strong className="text-rose-400 font-bold">2 Fatigue damage</strong> directly per draw!
+                Hand size is capped at <strong className="text-white">8 cards</strong> (excess drawn cards are burned directly to the Graveyard). Any creature defeated in combat, spell cast, or secret ward triggered is sent to your <strong className="text-purple-300">Graveyard</strong>. Click the Graveyard pile at any time to open the full interactive Graveyard Inspector.
               </p>
             </div>
           </div>

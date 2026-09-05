@@ -75,6 +75,7 @@ export interface PlayerState {
   deck: CardInstance[];
   hand: CardInstance[];
   board: (CardInstance | null)[]; // 5 creature lanes
+  championLane: CardInstance | null; // Dedicated Champion Lane
   wards: (CardInstance | null)[]; // 3 secret trap slots
   graveyard: CardInstance[];
   extraTurns: number;
@@ -149,7 +150,7 @@ export interface EquippedCosmetics {
 }
 
 export type GameAction =
-  | { type: 'playCard'; instanceId: string; targetLaneIndex?: number | null; targetUnitId?: string | null }
-  | { type: 'declareAttack'; attackerInstanceId: string; targetType: 'champion' | 'vanguard' | 'creature'; targetLaneOrId?: number | string | null }
+  | { type: 'playCard'; instanceId: string; targetLaneIndex?: number | 'champion' | null; targetUnitId?: string | null }
+  | { type: 'declareAttack'; attackerInstanceId: string; targetType: 'champion' | 'vanguard' | 'creature' | 'champion_lane'; targetLaneOrId?: number | string | null }
   | { type: 'activateHeroPower' }
   | { type: 'endTurn' };

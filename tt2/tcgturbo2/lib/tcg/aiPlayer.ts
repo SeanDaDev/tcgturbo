@@ -33,6 +33,17 @@ export async function executeAiTurn(
 
       const ai = state.players[1];
 
+      // 0. Play Champion Card into Dedicated Champion Lane if available
+      if (ai.championLane === null) {
+        const champCard = ai.hand.find(c => c.id.includes('_champion') || c.desc?.includes('Dedicated Champion Lane'));
+        if (champCard && champCard.cost <= ai.mana) {
+          updateGameState(s => playCard(s, champCard.instanceId, 'champion'));
+          keepPlaying = true;
+          await sleep(650);
+          continue;
+        }
+      }
+
       // 1. Look for In-Place Ascension combos
       for (let laneIdx = 0; laneIdx < ai.board.length; laneIdx++) {
         const boardUnit = ai.board[laneIdx];
@@ -107,9 +118,14 @@ export async function executeAiTurn(
     const stateBeforeCombat = getGameState();
     if (stateBeforeCombat.winner || stateBeforeCombat.currentTurn !== 2) return;
 
-    const readyAttackers = (getGameState().players[1].board.filter(
+    const boardAttackers = getGameState().players[1].board.filter(
       (c): c is CardInstance => !!c && c.canAttack && !c.hasAttackedThisTurn && !c.frozen
-    ) as CardInstance[]);
+    );
+    const champLaneAttacker = getGameState().players[1].championLane;
+    const readyAttackers: CardInstance[] = [...boardAttackers];
+    if (champLaneAttacker && champLaneAttacker.canAttack && !champLaneAttacker.hasAttackedThisTurn && !champLaneAttacker.frozen) {
+      readyAttackers.push(champLaneAttacker);
+    }
 
     for (const attacker of readyAttackers) {
       const currentState = getGameState();

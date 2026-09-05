@@ -1170,27 +1170,6 @@ export function BattleArena({
           </div>
         </div>
       )}
-          {gameState.actionLogs.slice(0, 10).map(log => (
-            <div
-              key={log.id}
-              className={`log-entry px-1.5 py-0.5 rounded leading-tight ${
-                log.type === 'log-attack'
-                  ? 'text-rose-300 bg-rose-950/40 border-l-2 border-rose-500'
-                  : log.type === 'log-ascend'
-                  ? 'text-amber-300 bg-amber-950/40 border-l-2 border-amber-400'
-                  : log.type === 'log-trap'
-                  ? 'text-purple-300 bg-purple-950/40 border-l-2 border-purple-500'
-                  : log.type === 'log-turn'
-                  ? 'text-sky-300 bg-sky-950/40 border-l-2 border-sky-400 font-bold'
-                  : 'text-slate-400 bg-slate-900/30'
-              }`}
-            >
-              <span className="log-time text-slate-600 mr-1">[{log.time}]</span>
-              {log.text}
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

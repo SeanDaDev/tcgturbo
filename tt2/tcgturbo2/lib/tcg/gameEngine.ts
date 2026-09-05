@@ -1524,26 +1524,6 @@ function grantRandomFriendlyAegis(state: GameState, playerIndex: number): GameSt
   };
 }
 
-function exhaustCreature(state: GameState, playerIndex: number, laneIndex: number): GameState {
-  const player = state.players[playerIndex];
-  const unit = player.board[laneIndex];
-  if (!unit) return state;
-
-  const nextBoard = [...player.board];
-  nextBoard[laneIndex] = {
-    ...unit,
-    canAttack: false,
-    hasAttackedThisTurn: true
-  };
-
-  return {
-    ...state,
-    players: state.players.map((p, idx) =>
-      idx === playerIndex ? { ...p, board: nextBoard } : p
-    ) as [PlayerState, PlayerState]
-  };
-}
-
 function checkAndTriggerWards(
   state: GameState,
   wardOwnerIndex: number,

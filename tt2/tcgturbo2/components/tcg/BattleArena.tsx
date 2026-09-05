@@ -11,7 +11,7 @@ import {
 } from '@/lib/tcg/gameEngine';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
-import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown } from 'lucide-react';
+import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown, ArrowRight, Layers } from 'lucide-react';
 
 interface BattleArenaProps {
   gameState: GameState;
@@ -305,16 +305,24 @@ export function BattleArena({
           </span>
           <span className="turn-indicator-badge font-bold text-amber-300 flex items-center gap-1 text-[11px] sm:text-xs">
             <Sparkles className="w-3 h-3 text-amber-400 animate-spin" />
-            <span className="truncate max-w-[110px] sm:max-w-none">{activePlayer.name}&apos;s Turn</span>
+            <span className="truncate max-w-[140px] sm:max-w-none">
+              {activePlayer.name}&apos;s Turn ({(gameState.phase || 'draw').toUpperCase()})
+            </span>
           </span>
           <span className="text-slate-400 text-[11px] sm:text-xs">R{gameState.round}</span>
         </div>
 
-        {/* Action Guide (Hidden on tiny screens to save space) */}
+        {/* Phase Guide & Quick Status */}
         <div className="hidden lg:flex items-center gap-2 bg-slate-950/80 px-3 py-1 rounded-full border border-slate-700/70 text-xs font-mono">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
           <span className="text-slate-200">
-            Action: Summon, evolve & attack in any order
+            {gameState.phase === 'draw'
+              ? 'Draw Phase: Draw a card to begin your tactical plays'
+              : gameState.phase === 'main'
+              ? 'Main Phase: Play creatures, evolutions, spells & wards'
+              : gameState.phase === 'combat'
+              ? 'Combat Phase: Select ready creatures to attack targets'
+              : 'End Phase: Cleaning up turn & passing control'}
           </span>
         </div>
 
@@ -715,23 +723,94 @@ export function BattleArena({
           </div>
         </div>
 
-        {/* Center Battlefield Dividing Flank with Hearthstone Iconic End Turn Button */}
-        <div className="battlefield-center-flank flex items-center justify-end px-2 py-1 relative z-30">
+        {/* Center Battlefield Dividing Flank with Turn Phase & Step Tracker + Hearthstone Action Button */}
+        <div className="battlefield-center-flank flex flex-wrap items-center justify-between px-2 py-1.5 relative z-30 gap-2 bg-slate-950/50 backdrop-blur-sm border-y border-amber-500/20 rounded-xl my-1 shadow-lg">
+          {/* Turn Phase & Step Tracker */}
+          <div className="phase-tracker-bar flex items-center gap-1 sm:gap-2 bg-slate-950/90 p-1 sm:p-1.5 rounded-xl border border-slate-800/80 shadow-inner">
+            <span className="hidden xl:inline font-mono text-[10px] text-amber-400 font-bold px-1 uppercase tracking-wider">
+              Phase:
+            </span>
+            {[
+              { key: 'draw', label: 'DRAW', icon: '🃏', desc: 'Draw Card' },
+              { key: 'main', label: 'MAIN', icon: '⚡', desc: 'Summon & Spells' },
+              { key: 'combat', label: 'COMBAT', icon: '⚔️', desc: 'Declare Attacks' },
+              { key: 'end', label: 'END', icon: '🛡️', desc: 'End Turn' }
+            ].map((p, pIdx) => {
+              const currentPhase = gameState.phase || 'draw';
+              const isActive = currentPhase === p.key;
+              const isPast =
+                (p.key === 'draw' && (currentPhase === 'main' || currentPhase === 'combat' || currentPhase === 'end')) ||
+                (p.key === 'main' && (currentPhase === 'combat' || currentPhase === 'end')) ||
+                (p.key === 'combat' && currentPhase === 'end');
+
+              return (
+                <div key={p.key} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={gameState.winner !== null || activePlayer.isAI}
+                    onClick={() => {
+                      if (activePlayer.isAI || gameState.winner !== null) return;
+                      if (isActive || (currentPhase === 'draw' && p.key === 'main')) {
+                        dispatchAction({ type: 'advancePhase' });
+                      } else if (currentPhase === 'main' && p.key === 'combat') {
+                        dispatchAction({ type: 'advancePhase' });
+                      } else if (p.key === 'end') {
+                        dispatchAction({ type: 'endTurn' });
+                        clearSelections();
+                      }
+                    }}
+                    className={`phase-step-chip flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-mono font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.8)] scale-105 ring-1 ring-amber-300'
+                        : isPast
+                        ? 'bg-slate-900/90 text-slate-400 border border-slate-800 hover:border-slate-700'
+                        : 'bg-slate-950/60 text-slate-600 border border-slate-900 hover:text-slate-400'
+                    }`}
+                    title={`${p.label} Phase: ${p.desc}`}
+                  >
+                    <span>{p.icon}</span>
+                    <span>{p.label}</span>
+                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping ml-0.5" />}
+                  </button>
+                  {pIdx < 3 && <ArrowRight className="w-3 h-3 text-slate-700 hidden sm:inline" />}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Dynamic Action Button */}
           <button
             type="button"
             disabled={gameState.winner !== null || activePlayer.isAI}
             onClick={() => {
-              dispatchAction({ type: 'endTurn' });
-              clearSelections();
-              soundEngine.playTurnChime();
+              if (activePlayer.isAI || gameState.winner !== null) return;
+              if (gameState.phase === 'draw') {
+                dispatchAction({ type: 'drawCard' });
+              } else if (gameState.phase === 'main') {
+                dispatchAction({ type: 'advancePhase' });
+              } else {
+                dispatchAction({ type: 'endTurn' });
+                clearSelections();
+                soundEngine.playTurnChime();
+              }
             }}
-            className={`hearthstone-end-turn-btn px-4 sm:px-6 md:px-8 py-2 sm:py-3 text-xs sm:text-sm md:text-base font-black font-serif tracking-wider uppercase ${
+            className={`hearthstone-end-turn-btn px-4 sm:px-6 md:px-8 py-2 sm:py-2.5 text-xs sm:text-sm md:text-base font-black font-serif tracking-wider uppercase ${
               activePlayer.isAI
                 ? 'opponent-turn opacity-70'
+                : gameState.phase === 'draw'
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white animate-pulse shadow-[0_0_15px_rgba(37,99,235,0.7)]'
+                : gameState.phase === 'main'
+                ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-yellow-100 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.7)]'
                 : 'text-yellow-100 animate-pulse'
             }`}
           >
-            {activePlayer.isAI ? 'ENEMY TURN' : `END TURN`}
+            {activePlayer.isAI
+              ? 'ENEMY TURN'
+              : gameState.phase === 'draw'
+              ? 'DRAW CARD 🃏'
+              : gameState.phase === 'main'
+              ? 'TO COMBAT ⚔️'
+              : 'END TURN 🛡️'}
           </button>
         </div>
 

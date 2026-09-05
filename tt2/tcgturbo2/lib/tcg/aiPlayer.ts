@@ -4,6 +4,8 @@ import {
   activateHeroPower,
   declareAttack,
   endTurn,
+  drawCardTurn,
+  advancePhase,
   calculateAscensionCost
 } from './gameEngine';
 
@@ -21,7 +23,13 @@ export async function executeAiTurn(
   try {
     await sleep(600);
 
-    // Phase 1: Play Cards & In-Place Ascensions
+    // Phase 1: Draw Phase
+    if (getGameState().phase === 'draw') {
+      updateGameState(s => drawCardTurn(s));
+      await sleep(600);
+    }
+
+    // Phase 2: Main Phase - Play Cards & Ascensions
     let keepPlaying = true;
     let iterations = 0;
 
@@ -104,7 +112,7 @@ export async function executeAiTurn(
       }
     }
 
-    // Phase 2: Hero Power
+    // Hero Power in Main Phase
     const stateAfterSummons = getGameState();
     if (stateAfterSummons.winner || stateAfterSummons.currentTurn !== 2) return;
     const aiPlayer = stateAfterSummons.players[1];
@@ -114,7 +122,13 @@ export async function executeAiTurn(
       await sleep(550);
     }
 
-    // Phase 3: Declare Attacks
+    // Transition from Main to Combat Phase
+    if (getGameState().phase === 'main') {
+      updateGameState(s => advancePhase(s));
+      await sleep(600);
+    }
+
+    // Phase 3: Combat Phase - Declare Attacks
     const stateBeforeCombat = getGameState();
     if (stateBeforeCombat.winner || stateBeforeCombat.currentTurn !== 2) return;
 
@@ -142,14 +156,12 @@ export async function executeAiTurn(
         .filter(entry => entry.card && entry.card.hasTaunt);
 
       if (tauntBlockers.length > 0) {
-        // Attack Taunt guardian
         const target = tauntBlockers[0];
         updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', target.lane));
         await sleep(700);
         continue;
       }
 
-      // If no Taunt, check favorable trades
       const enemyUnits = opp.board
         .map((c, idx) => ({ card: c, lane: idx }))
         .filter(entry => entry.card !== null);
@@ -162,7 +174,6 @@ export async function executeAiTurn(
         updateGameState(s => declareAttack(s, attacker.instanceId, 'creature', killableHighThreat.lane));
         await sleep(700);
       } else {
-        // Direct attack to enemy Vanguard
         updateGameState(s => declareAttack(s, attacker.instanceId, 'vanguard', null));
         await sleep(700);
       }

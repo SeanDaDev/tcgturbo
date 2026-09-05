@@ -108,7 +108,7 @@ export function createInitialGame(
     mode,
     round: 1,
     currentTurn: 1,
-    phase: 'main',
+    phase: 'draw',
     isPrivacyCurtainActive: false,
     winner: null,
     players: [p1, p2],
@@ -295,7 +295,7 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
 
   let nextState: GameState = {
     ...state,
-    phase: 'main',
+    phase: 'draw',
     isPrivacyCurtainActive: false,
     players: state.players.map((p, idx) =>
       idx === activeIndex
@@ -305,6 +305,7 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
             mana: nextMax,
             board: nextBoard,
             championLane: nextChampLane,
+            hasDrawnThisTurn: false,
             champion: {
               ...(p.champion || p.vanguard),
               heroPowerUsed: false
@@ -318,16 +319,76 @@ export function startTurn(state: GameState, playSound: boolean = true): GameStat
     ) as [PlayerState, PlayerState]
   };
 
-  // Draw 1 card at start of turn
-  nextState = drawCardInternal(nextState, activeId, playSound);
   nextState = logMessage(
     nextState,
-    `${active.name}'s turn begins (Mana: ${nextMax}/${nextMax})`,
+    `${active.name}'s turn begins - Draw Phase (Mana: ${nextMax}/${nextMax})`,
     'log-turn'
   );
 
   if (playSound) soundEngine.playTurnChime();
   return nextState;
+}
+
+export function drawCardTurn(state: GameState, playSound: boolean = true): GameState {
+  if (state.winner) return state;
+
+  const activeId = state.currentTurn;
+  const activeIndex = activeId - 1;
+  const active = state.players[activeIndex];
+
+  if (active.hasDrawnThisTurn) {
+    if (state.phase === 'draw') {
+      return { ...state, phase: 'main' };
+    }
+    return state;
+  }
+
+  let nextState = drawCardInternal(state, activeId, playSound);
+  const updatedPlayers = nextState.players.map((p, idx) =>
+    idx === activeIndex ? { ...p, hasDrawnThisTurn: true } : p
+  ) as [PlayerState, PlayerState];
+
+  nextState = {
+    ...nextState,
+    phase: 'main',
+    players: updatedPlayers
+  };
+
+  nextState = logMessage(
+    nextState,
+    `${active.name} drew a card during Draw Phase ➔ Entering Main Phase!`,
+    'log-info'
+  );
+
+  return nextState;
+}
+
+export function advancePhase(state: GameState): GameState {
+  if (state.winner) return state;
+
+  const activeIndex = state.currentTurn - 1;
+  const active = state.players[activeIndex];
+
+  if (state.phase === 'draw') {
+    return drawCardTurn(state);
+  } else if (state.phase === 'main') {
+    let nextState: GameState = {
+      ...state,
+      phase: 'combat'
+    };
+    soundEngine.playTurnChime();
+    return logMessage(nextState, `${active.name} enters Combat Phase! Declare your attacks.`, 'log-turn');
+  } else if (state.phase === 'combat') {
+    let nextState: GameState = {
+      ...state,
+      phase: 'end'
+    };
+    return endTurn(nextState);
+  } else if (state.phase === 'end') {
+    return endTurn(state);
+  }
+
+  return state;
 }
 
 export function canAscendOnUnit(
@@ -359,6 +420,11 @@ export function playCard(
   targetUnitId: string | null = null
 ): GameState {
   if (state.winner) return state;
+
+  // Auto-complete draw phase if player attempts to play card during Draw Phase
+  if (state.phase === 'draw') {
+    state = drawCardTurn(state, false);
+  }
 
   const activeIndex = state.currentTurn - 1;
   const opponentIndex = state.currentTurn === 1 ? 1 : 0;
@@ -626,6 +692,18 @@ export function declareAttack(
   targetLaneOrId: number | string | null = null
 ): GameState {
   if (state.winner) return state;
+
+  // Auto-advance to Combat Phase if attack is declared in Draw or Main Phase
+  if (state.phase === 'draw') {
+    state = drawCardTurn(state, false);
+  }
+  if (state.phase === 'main') {
+    state = {
+      ...state,
+      phase: 'combat'
+    };
+    state = logMessage(state, `${state.players[state.currentTurn - 1].name} transitions to Combat Phase!`, 'log-turn');
+  }
 
   const activeIndex = state.currentTurn - 1;
   const opponentIndex = state.currentTurn === 1 ? 1 : 0;
@@ -1727,6 +1805,10 @@ export function dispatchGameAction(state: GameState, action: GameAction): GameSt
       );
     case 'activateHeroPower':
       return activateHeroPower(state);
+    case 'drawCard':
+      return drawCardTurn(state);
+    case 'advancePhase':
+      return advancePhase(state);
     case 'endTurn':
       return endTurn(state);
     default:

@@ -4,7 +4,7 @@ export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 export type Keyword = 'Taunt' | 'Aegis' | 'Rush' | 'Lifesteal' | 'Freeze' | 'Deathrattle' | 'Resonance' | 'Overpower' | 'Stealth' | 'Regen';
 
 export type GameMode = 'couch_2p' | 'solo_ai';
-export type TurnPhase = 'main' | 'combat' | 'end';
+export type TurnPhase = 'draw' | 'main' | 'combat' | 'end';
 
 export interface CardDef {
   id: string;
@@ -79,6 +79,7 @@ export interface PlayerState {
   wards: (CardInstance | null)[]; // 3 secret trap slots
   graveyard: CardInstance[];
   extraTurns: number;
+  hasDrawnThisTurn?: boolean;
 }
 
 export interface ActionLog {
@@ -153,4 +154,6 @@ export type GameAction =
   | { type: 'playCard'; instanceId: string; targetLaneIndex?: number | 'champion' | null; targetUnitId?: string | null }
   | { type: 'declareAttack'; attackerInstanceId: string; targetType: 'champion' | 'vanguard' | 'creature' | 'champion_lane'; targetLaneOrId?: number | string | null }
   | { type: 'activateHeroPower' }
+  | { type: 'drawCard' }
+  | { type: 'advancePhase' }
   | { type: 'endTurn' };

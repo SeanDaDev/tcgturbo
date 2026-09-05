@@ -345,6 +345,16 @@ export function BattleArena({
             <span>{isMobileHandExpanded ? 'Hide Hand' : 'View Hand'}</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => setViewingGraveyardPlayer(gameState.currentTurn)}
+            className="btn btn-outline border-purple-500/50 text-purple-300 hover:bg-purple-950 px-2 sm:px-3 py-1 text-[11px] sm:text-xs flex items-center gap-1 font-mono"
+            title="Inspect Active Player Graveyard"
+          >
+            <span>🪦</span>
+            <span className="hidden sm:inline">Grave ({activePlayer.graveyard.length})</span>
+          </button>
+
           {onChangeDecks && (
             <button
               type="button"
@@ -720,6 +730,43 @@ export function BattleArena({
                 </div>
               );
             })}
+
+            {/* Player 2 Visual Graveyard Zone Slot */}
+            {(() => {
+              const p2Grave = gameState.players[1].graveyard;
+              const topCard = p2Grave.length > 0 ? p2Grave[p2Grave.length - 1] : null;
+
+              return (
+                <div
+                  className="creature-lane-slot graveyard-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 border-purple-800/80 bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 hover:border-purple-400 flex flex-col items-center justify-center relative transition-all cursor-pointer shadow-lg group"
+                  onClick={() => setViewingGraveyardPlayer(2)}
+                  title="Click to inspect Player 2 Graveyard"
+                >
+                  <div className="absolute -top-2.5 sm:-top-3 z-30 bg-purple-900 border border-purple-500 text-purple-200 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
+                    <span>🪦</span>
+                    <span>GRAVEYARD ({p2Grave.length})</span>
+                  </div>
+
+                  {topCard ? (
+                    <div className="w-full h-full p-1 flex flex-col items-center justify-center relative overflow-hidden rounded-lg">
+                      <Card
+                        card={topCard}
+                        size="sm"
+                        onInspect={onInspectCard}
+                        onClick={() => setViewingGraveyardPlayer(2)}
+                      />
+                      <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-transparent transition-colors pointer-events-none" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-purple-400/50 p-1 text-center select-none">
+                      <span className="text-xl sm:text-2xl">🪦</span>
+                      <span className="text-[8px] sm:text-[10px] font-mono font-bold leading-tight">Graveyard</span>
+                      <span className="text-[8px] font-mono text-slate-600">Empty (0)</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -985,6 +1032,43 @@ export function BattleArena({
                 </div>
               );
             })}
+
+            {/* Player 1 Visual Graveyard Zone Slot */}
+            {(() => {
+              const p1Grave = gameState.players[0].graveyard;
+              const topCard = p1Grave.length > 0 ? p1Grave[p1Grave.length - 1] : null;
+
+              return (
+                <div
+                  className="creature-lane-slot graveyard-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 border-purple-800/80 bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 hover:border-purple-400 flex flex-col items-center justify-center relative transition-all cursor-pointer shadow-lg group"
+                  onClick={() => setViewingGraveyardPlayer(1)}
+                  title="Click to inspect Player 1 Graveyard"
+                >
+                  <div className="absolute -top-2.5 sm:-top-3 z-30 bg-purple-900 border border-purple-500 text-purple-200 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
+                    <span>🪦</span>
+                    <span>GRAVEYARD ({p1Grave.length})</span>
+                  </div>
+
+                  {topCard ? (
+                    <div className="w-full h-full p-1 flex flex-col items-center justify-center relative overflow-hidden rounded-lg">
+                      <Card
+                        card={topCard}
+                        size="sm"
+                        onInspect={onInspectCard}
+                        onClick={() => setViewingGraveyardPlayer(1)}
+                      />
+                      <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-transparent transition-colors pointer-events-none" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-purple-400/50 p-1 text-center select-none">
+                      <span className="text-xl sm:text-2xl">🪦</span>
+                      <span className="text-[8px] sm:text-[10px] font-mono font-bold leading-tight">Graveyard</span>
+                      <span className="text-[8px] font-mono text-slate-600">Empty (0)</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Player 1 Hand (Fanned Out with Hearthstone Arc & Green Playable Aura) */}

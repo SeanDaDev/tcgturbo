@@ -481,13 +481,24 @@ export function playCard(
   }
 
   // Check lane & ascension
-  let lane: number | null = typeof targetLaneIndex === 'number' ? targetLaneIndex : null;
+  let lane: number | null = typeof targetLaneIndex === 'number' && targetLaneIndex >= 0 && targetLaneIndex <= 4 ? targetLaneIndex : null;
+  let existingUnit = lane !== null ? active.board[lane] : null;
+  let isAscending = existingUnit ? canAscendOnUnit(card, existingUnit) : false;
+
+  // If targeted lane is occupied and cannot ascend, redirect to an empty lane or reject safely
+  if (existingUnit && !isAscending) {
+    const emptyLaneIdx = active.board.findIndex(slot => slot === null);
+    if (emptyLaneIdx !== -1) {
+      lane = emptyLaneIdx;
+      existingUnit = null;
+    } else {
+      return logMessage(state, 'Creature lane is occupied and card cannot ascend on selected unit!', 'log-trap');
+    }
+  }
+
   if (lane === null || lane < 0 || lane > 4) {
     lane = active.board.findIndex(slot => slot === null);
   }
-
-  const existingUnit = lane !== null && lane >= 0 ? active.board[lane] : null;
-  const isAscending = canAscendOnUnit(card, existingUnit);
 
   const actualCost = calculateAscensionCost(card, existingUnit);
   const currentMana = active.mana ?? 0;
@@ -606,7 +617,9 @@ export function playCard(
       nextState = {
         ...nextState,
         players: nextState.players.map((p, idx) =>
-          idx === activeIndex ? { ...p, board: nextBoard } : p
+          idx === activeIndex
+            ? { ...p, board: nextBoard, graveyard: [...p.graveyard, existingUnit] }
+            : p
         ) as [PlayerState, PlayerState]
       };
 

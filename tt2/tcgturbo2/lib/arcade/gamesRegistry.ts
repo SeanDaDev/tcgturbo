@@ -59,9 +59,9 @@ export const ARCADE_GAMES: ArcadeGame[] = [
     players: '1P',
     tags: ['Classic', 'Klondike', 'Time Attack', 'Relaxing'],
     thumbnail: '/assets/cards/card_time.jpg',
-    badge: '🔮 POPULAR',
-    status: 'coming_soon',
-    releaseDate: 'Coming Next Update',
+    badge: '🔮 PLAYABLE ARCADE',
+    status: 'playable',
+    releaseDate: 'Available Now',
     playsCount: 18900,
     rating: 4.79
   },
@@ -75,9 +75,9 @@ export const ARCADE_GAMES: ArcadeGame[] = [
     players: '1P',
     tags: ['Memory', 'Brain Training', 'Puzzles'],
     thumbnail: '/assets/cards/card_titan.jpg',
-    badge: '🌿 CASUAL',
-    status: 'coming_soon',
-    releaseDate: 'In Development',
+    badge: '🌿 PLAYABLE ARCADE',
+    status: 'playable',
+    releaseDate: 'Available Now',
     playsCount: 9400,
     rating: 4.67
   }

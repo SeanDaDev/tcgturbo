@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { ARCADE_GAMES } from '@/lib/arcade/gamesRegistry';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { AstralBlackjackGame } from './AstralBlackjackGame';
+import { ChronoSolitaireGame } from './ChronoSolitaireGame';
+import { VerdantRuneMatchGame } from './VerdantRuneMatchGame';
 import {
   Gamepad2,
   Users,
@@ -34,6 +36,30 @@ export function ArcadeHub({ onLaunchGame }: ArcadeHubProps) {
   if (activeMiniGame === 'astral_blackjack') {
     return (
       <AstralBlackjackGame
+        onBackToArcade={() => setActiveMiniGame(null)}
+        onLaunchMainGame={() => {
+          setActiveMiniGame(null);
+          onLaunchGame('tcg_turbo');
+        }}
+      />
+    );
+  }
+
+  if (activeMiniGame === 'chrono_solitaire') {
+    return (
+      <ChronoSolitaireGame
+        onBackToArcade={() => setActiveMiniGame(null)}
+        onLaunchMainGame={() => {
+          setActiveMiniGame(null);
+          onLaunchGame('tcg_turbo');
+        }}
+      />
+    );
+  }
+
+  if (activeMiniGame === 'rune_memory_match') {
+    return (
+      <VerdantRuneMatchGame
         onBackToArcade={() => setActiveMiniGame(null)}
         onLaunchMainGame={() => {
           setActiveMiniGame(null);
@@ -183,8 +209,8 @@ export function ArcadeHub({ onLaunchGame }: ArcadeHubProps) {
       {/* Games Catalog Grid (AddictingGames / Miniclip Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-12">
         {filteredGames.map(game => {
-          const isPlayableMiniGame = game.id === 'astral_blackjack';
           const isFlagshipGame = game.id === 'tcg_turbo';
+          const isPlayableMiniGame = game.status === 'playable' || game.id === 'astral_blackjack' || game.id === 'chrono_solitaire' || game.id === 'rune_memory_match';
 
           return (
             <div
@@ -263,7 +289,7 @@ export function ArcadeHub({ onLaunchGame }: ArcadeHubProps) {
                     type="button"
                     onClick={() => {
                       soundEngine.playCardDraw();
-                      setActiveMiniGame('astral_blackjack');
+                      setActiveMiniGame(game.id);
                     }}
                     className="w-full btn bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-mono text-xs font-bold py-2.5 rounded-xl shadow flex items-center justify-center gap-1.5 transition-transform hover:scale-102"
                   >

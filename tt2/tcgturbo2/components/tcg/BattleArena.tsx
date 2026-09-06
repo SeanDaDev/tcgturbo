@@ -11,7 +11,7 @@ import {
 } from '@/lib/tcg/gameEngine';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
-import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react';
+import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface BattleArenaProps {
   gameState: GameState;
@@ -48,17 +48,46 @@ export function BattleArena({
   const [isMobileHandExpanded, setIsMobileHandExpanded] = useState<boolean>(true);
   const [combatFlash, setCombatFlash] = useState<string | null>(null);
   const [viewingGraveyardPlayer, setViewingGraveyardPlayer] = useState<1 | 2 | null>(null);
+  const [manualPov, setManualPov] = useState<1 | 2 | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const activePlayer = gameState.players[gameState.currentTurn - 1];
   const isPlayer1Turn = gameState.currentTurn === 1;
 
+  // Perspective (POV) calculation:
+  // - Online mode: localPlayerNumber defines which seat you sit in.
+  // - Couch 2P (Pass & Play): default POV automatically swaps with current turn!
+  // - Solo vs AI: Player 1 (human) sits at the bottom, AI is at top.
+  // - Manual POV toggle overrides if set.
+  const povPlayerId: 1 | 2 = manualPov !== null
+    ? manualPov
+    : localPlayerNumber
+    ? localPlayerNumber
+    : (gameState.mode === 'couch_2p' && !gameState.players[1].isAI)
+    ? gameState.currentTurn
+    : 1;
+
+  const bottomPlayerId: 1 | 2 = povPlayerId;
+  const topPlayerId: 1 | 2 = povPlayerId === 1 ? 2 : 1;
+
+  const bottomPlayer = gameState.players[bottomPlayerId - 1];
+  const topPlayer = gameState.players[topPlayerId - 1];
+
+  const isBottomPlayerTurn = gameState.currentTurn === bottomPlayerId;
+  const isTopPlayerTurn = gameState.currentTurn === topPlayerId;
+
   // Clear selections
   const clearSelections = useCallback(() => {
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
   }, []);
+
+  // Reset manual POV override and clear selections whenever turn changes so view naturally tracks active player
+  useEffect(() => {
+    setManualPov(null);
+    clearSelections();
+  }, [gameState.currentTurn, clearSelections]);
 
   // Global escape & click away
   useEffect(() => {
@@ -240,7 +269,7 @@ export function BattleArena({
 
     // Direct strike against opponent Champion Commander
     if (selectedAttackerId && gameState.currentTurn !== targetPlayerId) {
-      const oppTaunters = targetPlayerId === 1 ? p1Taunters : p2Taunters;
+      const oppTaunters = targetPlayerId === bottomPlayerId ? bottomTaunters : topTaunters;
       if (oppTaunters.length > 0) {
         soundEngine.playTrap();
       }
@@ -266,33 +295,38 @@ export function BattleArena({
     }
   };
 
-  // Selected hand card reference
-  const selectedCardInHand = activePlayer.hand.find(c => c.instanceId === selectedHandCardId);
+  // Selected hand card reference from bottom (POV) player
+  const selectedCardInHand = bottomPlayer.hand.find(c => c.instanceId === selectedHandCardId);
 
   // Check Taunt on both boards
-  const p1Taunters = gameState.players[0].board.filter(c => c && c.hasTaunt);
-  const p2Taunters = gameState.players[1].board.filter(c => c && c.hasTaunt);
+  const bottomTaunters = bottomPlayer.board.filter(c => c && c.hasTaunt);
+  const topTaunters = topPlayer.board.filter(c => c && c.hasTaunt);
 
   // Safe Mana & MaxMana getters
-  const p1Mana = gameState.players[0].mana ?? 1;
-  const p1MaxMana = gameState.players[0].maxMana ?? 1;
-  const p2Mana = gameState.players[1].mana ?? 1;
-  const p2MaxMana = gameState.players[1].maxMana ?? 1;
+  const bottomMana = bottomPlayer.mana ?? 1;
+  const bottomMaxMana = bottomPlayer.maxMana ?? 1;
+  const topMana = topPlayer.mana ?? 1;
+  const topMaxMana = topPlayer.maxMana ?? 1;
 
   // Champion Commander data getters
-  const p1Champ = gameState.players[0].champion || gameState.players[0].vanguard;
-  const p2Champ = gameState.players[1].champion || gameState.players[1].vanguard;
+  const bottomChamp = bottomPlayer.champion || bottomPlayer.vanguard;
+  const topChamp = topPlayer.champion || topPlayer.vanguard;
 
-  // Hand visibility in Online vs Couch Co-Op:
-  const hideP1Hand = localPlayerNumber
-    ? localPlayerNumber !== 1
-    : gameState.mode === 'couch_2p' && !isPlayer1Turn;
-  const hideP2Hand = localPlayerNumber
-    ? localPlayerNumber !== 2
-    : (gameState.mode === 'couch_2p' && isPlayer1Turn) || gameState.players[1].isAI;
+  // Hand visibility:
+  // Bottom hand is face-up during bottom player's turn unless privacy curtain is covering the screen
+  const hideBottomHand = localPlayerNumber
+    ? localPlayerNumber !== bottomPlayerId
+    : gameState.mode === 'couch_2p'
+    ? !isBottomPlayerTurn || gameState.isPrivacyCurtainActive
+    : false;
+
+  // Top hand (Opponent) is always face down
+  const hideTopHand = true;
 
   const isMyTurn = localPlayerNumber
     ? localPlayerNumber === gameState.currentTurn
+    : gameState.mode === 'couch_2p'
+    ? isBottomPlayerTurn
     : !activePlayer.isAI;
 
   return (
@@ -369,6 +403,26 @@ export function BattleArena({
             <span>{isMobileHandExpanded ? 'Hide Hand' : 'View Hand'}</span>
           </button>
 
+          {/* POV Flip Toggle for Couch 2P */}
+          {gameState.mode === 'couch_2p' && (
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playHover();
+                setManualPov(current => {
+                  const activePov = current !== null ? current : povPlayerId;
+                  return activePov === 1 ? 2 : 1;
+                });
+              }}
+              className="btn btn-outline border-purple-500/40 text-purple-300 hover:bg-purple-950 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs flex items-center gap-1 font-mono"
+              title="Flip Board View (Switch POV)"
+            >
+              <RefreshCw className="w-3 h-3 text-purple-400" />
+              <span className="hidden sm:inline">POV:</span>
+              <span>{gameState.players[povPlayerId - 1].name}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setViewingGraveyardPlayer(gameState.currentTurn)}
@@ -408,27 +462,27 @@ export function BattleArena({
         <div className="mat-center-divider absolute top-1/2 left-2 right-2 h-[1px] bg-gradient-to-r from-transparent via-amber-500/30 to-transparent pointer-events-none" />
 
         {/* =========================================================================
-            PLAYER 2 / OPPONENT ZONE (TOP)
+            OPPONENT ZONE (TOP) - Perspective Aligned
             ========================================================================= */}
-        <div className="player-mat-zone p2-zone flex flex-col gap-1.5 relative z-10">
+        <div className="player-mat-zone top-zone flex flex-col gap-1.5 relative z-10">
           <div className="mat-row flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-            {/* Hearthstone Oval Hero Portrait Frame (P2) */}
+            {/* Hearthstone Oval Hero Portrait Frame (Top Opponent) */}
             <div
               className={`champion-portrait-wrap flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 to-slate-950 border-2 rounded-2xl p-1.5 sm:p-2 shadow-xl cursor-pointer transition-all ${
-                selectedAttackerId && isPlayer1Turn && p2Taunters.length === 0
+                selectedAttackerId && isBottomPlayerTurn && topTaunters.length === 0
                   ? 'border-red-500 ring-4 ring-red-500/60 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.7)]'
-                  : !isPlayer1Turn
+                  : isTopPlayerTurn
                   ? 'border-purple-400/80 shadow-[0_0_18px_rgba(192,132,252,0.4)]'
                   : 'border-slate-800 hover:border-slate-700'
               }`}
-              onClick={() => handleChampionClick(2)}
-              title={selectedAttackerId && isPlayer1Turn ? 'Click to declare DIRECT ATTACK on enemy Champion!' : 'Champion Command Zone'}
+              onClick={() => handleChampionClick(topPlayerId)}
+              title={selectedAttackerId && isBottomPlayerTurn ? `Click to declare DIRECT ATTACK on ${topPlayer.name}'s Champion!` : 'Champion Command Zone'}
             >
               {/* Hearthstone Oval Hero Token */}
               <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full overflow-hidden border-2 border-amber-400 shadow-md flex-shrink-0 bg-slate-950">
                 <Image
-                  src={p2Champ.avatar}
-                  alt={p2Champ.name}
+                  src={topChamp.avatar}
+                  alt={topChamp.name}
                   fill
                   sizes="52px"
                   priority
@@ -436,7 +490,7 @@ export function BattleArena({
                 />
                 {/* Hearthstone Blood-Red Health Badge */}
                 <div className="absolute bottom-0 right-0 bg-gradient-to-br from-red-600 to-rose-700 text-white font-mono font-black text-[10px] sm:text-xs px-1.5 rounded-tl-md border-t border-l border-red-300 drop-shadow flex items-center justify-center">
-                  {p2Champ.hp}
+                  {topChamp.hp}
                 </div>
               </div>
 
@@ -445,52 +499,31 @@ export function BattleArena({
                 <div className="flex items-center gap-1">
                   <Crown className="w-3 h-3 text-purple-400 flex-shrink-0" />
                   <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[90px] sm:max-w-[130px]">
-                    {gameState.players[1].name}
+                    {topPlayer.name}
                   </span>
                 </div>
                 <span className="text-[10px] text-purple-300 font-mono truncate max-w-[90px] sm:max-w-[130px]">
-                  {p2Champ.name}
+                  {topChamp.name}
                 </span>
               </div>
 
-              {/* Commander Power Medallion (P2) */}
-              <button
-                type="button"
-                disabled={
-                  p2Champ.heroPowerUsed ||
-                  p2Mana < p2Champ.heroPower.cost ||
-                  isPlayer1Turn ||
-                  !isMyTurn ||
-                  (localPlayerNumber ? localPlayerNumber !== 2 : false)
-                }
-                onClick={() => {
-                  if (!isPlayer1Turn && isMyTurn && (localPlayerNumber ? localPlayerNumber === 2 : true)) {
-                    dispatchAction({ type: 'activateHeroPower' });
-                  }
-                }}
-                className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
-                  !p2Champ.heroPowerUsed &&
-                  p2Mana >= p2Champ.heroPower.cost &&
-                  !isPlayer1Turn &&
-                  isMyTurn &&
-                  (localPlayerNumber ? localPlayerNumber === 2 : true)
-                    ? 'bg-gradient-to-br from-indigo-900 to-purple-900 border-amber-400 text-purple-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
-                    : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
-                }`}
-                title={`Commander Power (2 Mana): ${p2Champ.heroPower.name} - ${p2Champ.heroPower.desc}`}
+              {/* Commander Power Medallion (Top Opponent) */}
+              <div
+                className="commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-slate-800 bg-slate-950 flex flex-col items-center justify-center relative opacity-70 text-slate-500"
+                title={`Commander Power: ${topChamp.heroPower.name} - ${topChamp.heroPower.desc}`}
               >
-                <Zap className="w-4 h-4 text-amber-300" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold border border-blue-300 shadow">
-                  2
+                <Zap className="w-4 h-4 text-slate-500" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-slate-800 text-slate-300 text-[9px] rounded-full flex items-center justify-center font-bold border border-slate-600">
+                  {topChamp.heroPower.cost || 2}
                 </span>
-              </button>
+              </div>
             </div>
 
-            {/* Secret Wards (P2) */}
+            {/* Secret Wards (Top Opponent) */}
             <div className="secret-wards-row flex items-center gap-1.5">
-              {gameState.players[1].wards.map((ward, idx) => (
+              {topPlayer.wards.map((ward, idx) => (
                 <div
-                  key={`p2_ward_${idx}`}
+                  key={`top_ward_${idx}`}
                   className={`ward-slot-chip w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center text-xs transition-all ${
                     ward
                       ? 'border-purple-500 bg-purple-950/80 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.6)] animate-pulse'
@@ -503,18 +536,18 @@ export function BattleArena({
               ))}
             </div>
 
-            {/* Hearthstone Chunky Mana Tray & Piles (P2) */}
+            {/* Hearthstone Chunky Mana Tray & Piles (Top Opponent) */}
             <div className="flex items-center gap-2">
               <div className="mana-tray-hearthstone flex items-center gap-1.5 bg-slate-950/90 border border-sky-500/40 px-2.5 py-1 rounded-xl shadow-inner">
                 <span className="font-mono text-xs font-black text-sky-400 flex items-center gap-0.5">
-                  💎 {p2Mana}/{p2MaxMana}
+                  💎 {topMana}/{topMaxMana}
                 </span>
                 <div className="hidden sm:flex gap-1">
-                  {Array.from({ length: p2MaxMana }).map((_, i) => (
+                  {Array.from({ length: topMaxMana }).map((_, i) => (
                     <div
-                      key={`p2_gem_${i}`}
+                      key={`top_gem_${i}`}
                       className={`w-2 h-3 rounded-xs border ${
-                        i < p2Mana
+                        i < topMana
                           ? 'bg-gradient-to-b from-cyan-300 to-blue-600 border-cyan-200 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
                           : 'bg-slate-800/60 border-slate-700'
                       }`}
@@ -527,96 +560,67 @@ export function BattleArena({
               <div className="flex gap-1.5 text-[9px] font-mono">
                 <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
                   <span className="text-[8px]">DECK</span>
-                  <span className="font-bold text-white text-[10px]">{gameState.players[1].deck.length}</span>
+                  <span className="font-bold text-white text-[10px]">{topPlayer.deck.length}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setViewingGraveyardPlayer(2)}
+                  onClick={() => setViewingGraveyardPlayer(topPlayerId)}
                   className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-purple-900/60 hover:border-purple-400 flex flex-col items-center justify-center text-purple-300 transition-colors cursor-pointer shadow"
-                  title="View Player 2 Graveyard"
+                  title={`View ${topPlayer.name} Graveyard`}
                 >
                   <span className="text-[8px] flex items-center gap-0.5">🪦 GRAVE</span>
-                  <span className="font-bold text-white text-[10px]">{gameState.players[1].graveyard.length}</span>
+                  <span className="font-bold text-white text-[10px]">{topPlayer.graveyard.length}</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Player 2 Hand (Hearthstone Curved Fan Arc) */}
-          <div className="hand-container p2-hand flex justify-center items-center gap-[-14px] min-h-[95px] sm:min-h-[120px] py-1">
-            {gameState.players[1].hand.map((card, idx) => {
-              const isSelected = selectedHandCardId === card.instanceId && !isPlayer1Turn;
-              const total = gameState.players[1].hand.length;
+          {/* Top Opponent Hand (Face Down Fanned Out Arc) */}
+          <div className="hand-container top-hand flex justify-center items-center gap-[-14px] min-h-[95px] sm:min-h-[120px] py-1">
+            {topPlayer.hand.map((card, idx) => {
+              const total = topPlayer.hand.length;
               const mid = (total - 1) / 2;
               const fanAngle = total > 1 ? (idx - mid) * 3 : 0;
               const fanY = total > 1 ? Math.abs(idx - mid) * 2 : 0;
 
-              // Hearthstone Playable Green Glow: card cost <= mana and friendly turn
-              const isCardPlayable = !hideP2Hand && !isPlayer1Turn && card.cost <= p2Mana;
-
               return (
                 <div
-                  key={card.instanceId || `p2_card_${idx}`}
+                  key={card.instanceId || `top_card_${idx}`}
                   style={{
-                    transform: isSelected
-                      ? 'translateY(-20px) scale(1.1) rotate(0deg)'
-                      : `translateY(${fanY}px) rotate(${fanAngle}deg)`,
+                    transform: `translateY(${fanY}px) rotate(${fanAngle}deg)`,
                     transition: 'all 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                   }}
-                  className={`-mx-2 sm:-mx-2.5 z-20 hover:z-40 ${
-                    isSelected ? 'z-40 ring-2 ring-purple-400 rounded-xl' : ''
-                  }`}
+                  className="-mx-2 sm:-mx-2.5 z-20"
                 >
                   <Card
                     card={card}
-                    isFaceDown={hideP2Hand}
-                    size={!isPlayer1Turn ? 'sm' : 'xs'}
-                    isPlayable={isCardPlayable}
-                    draggable={!hideP2Hand && !isPlayer1Turn}
+                    isFaceDown={hideTopHand}
+                    size="xs"
+                    isPlayable={false}
+                    draggable={false}
                     equippedCardBack={equippedCosmetics?.cardBack}
                     equippedFoilStyle={equippedCosmetics?.foilStyle}
-                    onDragStart={() => {
-                      if (!hideP2Hand && !isPlayer1Turn) {
-                        setDraggedCardId(card.instanceId);
-                        setSelectedHandCardId(card.instanceId);
-                      }
-                    }}
-                    onInspect={onInspectCard}
-                    onClick={() => {
-                      if (!hideP2Hand) handleCardClick(card, 2);
-                    }}
                   />
                 </div>
               );
             })}
           </div>
 
-          {/* Player 2 Battlefield Lanes */}
-          <div className="lanes-container p2-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
-            {/* Player 2 Dedicated Champion Lane Slot */}
+          {/* Top Opponent Battlefield Lanes */}
+          <div className="lanes-container top-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
+            {/* Top Opponent Dedicated Champion Lane Slot */}
             {(() => {
-              const p2ChampLane = gameState.players[1].championLane;
-              const isP2Turn = !isPlayer1Turn;
-              const isChampPlayable = selectedHandCardId && isP2Turn && (selectedCardInHand?.id.includes('_champion') || selectedCardInHand?.desc?.includes('Dedicated Champion Lane'));
+              const topChampLane = topPlayer.championLane;
 
               return (
                 <div
                   className={`creature-lane-slot champion-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 flex items-center justify-center relative transition-all cursor-pointer ${
-                    p2ChampLane
+                    topChampLane
                       ? 'border-amber-400 bg-gradient-to-b from-amber-950/40 via-slate-900 to-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-                      : isChampPlayable
-                      ? 'border-amber-400 bg-amber-950/40 ring-2 ring-amber-400/70 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.8)]'
                       : 'border-dashed border-amber-500/40 bg-slate-950/60 hover:border-amber-400/70'
                   }`}
                   onClick={() => {
-                    if (isP2Turn) {
-                      if (!p2ChampLane && selectedHandCardId) {
-                        dispatchAction({ type: 'playCard', instanceId: selectedHandCardId, targetLaneIndex: 'champion' });
-                        clearSelections();
-                      } else if (p2ChampLane) {
-                        handleBoardCreatureClick(p2ChampLane, 2, -1);
-                      }
-                    } else if (p2ChampLane && selectedAttackerId && isPlayer1Turn) {
+                    if (topChampLane && selectedAttackerId && isBottomPlayerTurn) {
                       dispatchAction({
                         type: 'declareAttack',
                         attackerInstanceId: selectedAttackerId,
@@ -626,29 +630,18 @@ export function BattleArena({
                       clearSelections();
                     }
                   }}
-                  onDragOver={e => { if (isP2Turn) e.preventDefault(); }}
-                  onDrop={e => {
-                    e.preventDefault();
-                    if (draggedCardId && isP2Turn) {
-                      dispatchAction({ type: 'playCard', instanceId: draggedCardId, targetLaneIndex: 'champion' });
-                      clearSelections();
-                    }
-                  }}
-                  title="Dedicated Champion Lane"
+                  title={`${topPlayer.name}'s Champion Lane`}
                 >
                   <div className="absolute -top-2.5 sm:-top-3 z-30 bg-amber-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
                     <Crown className="w-2.5 h-2.5" />
                     <span>CHAMPION</span>
                   </div>
 
-                  {p2ChampLane ? (
+                  {topChampLane ? (
                     <Card
-                      card={p2ChampLane}
+                      card={topChampLane}
                       size="sm"
-                      isValidTarget={!!selectedAttackerId && isPlayer1Turn}
-                      isReadyToAttack={isP2Turn && p2ChampLane.canAttack && !p2ChampLane.hasAttackedThisTurn && !p2ChampLane.frozen}
-                      isExhausted={isP2Turn && (!p2ChampLane.canAttack || p2ChampLane.hasAttackedThisTurn)}
-                      isSelectedAttacker={p2ChampLane.instanceId === selectedAttackerId && isP2Turn}
+                      isValidTarget={!!selectedAttackerId && isBottomPlayerTurn}
                       onInspect={onInspectCard}
                     />
                   ) : (
@@ -660,60 +653,27 @@ export function BattleArena({
                 </div>
               );
             })()}
-            {gameState.players[1].board.map((creature, laneIdx) => {
-              const isTargetCandidate = !!selectedAttackerId && isPlayer1Turn;
+
+            {/* Top Opponent 5 Creature Lanes */}
+            {topPlayer.board.map((creature, laneIdx) => {
+              const isTargetCandidate = !!selectedAttackerId && isBottomPlayerTurn;
               const isTaunter = creature && creature.hasTaunt;
-              const isTargetValid = isTargetCandidate && (p2Taunters.length === 0 || isTaunter);
-
-              const isP2Turn = !isPlayer1Turn;
-              const isP2Ready = !!(isP2Turn && creature && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen);
-              const isP2AttackerSelected = !!(creature && creature.instanceId === selectedAttackerId && isP2Turn);
-
-              const isP2Ascendable = !!(
-                isP2Turn &&
-                selectedCardInHand &&
-                creature &&
-                canAscendOnUnit(selectedCardInHand, creature) &&
-                calculateAscensionCost(selectedCardInHand, creature) <= activePlayer.mana
-              );
-              const p2EvoDiscount = isP2Ascendable && selectedCardInHand && creature
-                ? Math.max(0, selectedCardInHand.cost - calculateAscensionCost(selectedCardInHand, creature))
-                : 0;
-
-              const isRippleActive = dropImpactSlot?.player === 2 && dropImpactSlot?.lane === laneIdx;
+              const isTargetValid = isTargetCandidate && (topTaunters.length === 0 || isTaunter);
+              const isRippleActive = dropImpactSlot?.player === topPlayerId && dropImpactSlot?.lane === laneIdx;
 
               return (
                 <div
-                  key={`p2_lane_${laneIdx}`}
+                  key={`top_lane_${laneIdx}`}
                   className={`creature-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border flex items-center justify-center relative transition-all cursor-pointer ${
                     creature
-                      ? isP2Ascendable
-                        ? 'border-amber-400 ring-2 ring-amber-400/70 shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                      ? isTargetValid
+                        ? 'border-rose-500 ring-2 ring-rose-500/70 shadow-[0_0_15px_rgba(244,63,94,0.6)] animate-pulse'
                         : 'border-transparent'
-                      : selectedHandCardId && !isPlayer1Turn
-                      ? 'border-purple-500/80 bg-purple-950/30 ring-2 ring-purple-400/50 animate-pulse'
-                      : 'border-dashed border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
+                      : 'border-dashed border-slate-800/80 bg-slate-950/40'
                   }`}
                   onClick={() => {
-                    if (isP2Turn) {
-                      if (!creature) handleLaneSlotClick(laneIdx, 2);
-                      else handleBoardCreatureClick(creature, 2, laneIdx);
-                    } else {
-                      if (creature) handleBoardCreatureClick(creature, 2, laneIdx);
-                    }
-                  }}
-                  onDragOver={e => {
-                    if (isP2Turn) e.preventDefault();
-                  }}
-                  onDrop={e => {
-                    e.preventDefault();
-                    if (draggedCardId && isP2Turn) {
-                      dispatchAction({
-                        type: 'playCard',
-                        instanceId: draggedCardId,
-                        targetLaneIndex: laneIdx
-                      });
-                      clearSelections();
+                    if (creature) {
+                      handleBoardCreatureClick(creature, topPlayerId, laneIdx);
                     }
                   }}
                 >
@@ -726,24 +686,13 @@ export function BattleArena({
                     </div>
                   )}
 
-                  {isP2Ascendable && (
-                    <div className="absolute -top-3 sm:-top-3.5 z-30 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black font-mono shadow-[0_0_15px_rgba(245,158,11,0.9)] animate-bounce flex items-center gap-1 pointer-events-none">
-                      <Sparkles className="w-2.5 h-2.5" />
-                      <span>EVOLVE (-{p2EvoDiscount}⚡)</span>
-                    </div>
-                  )}
-
                   {creature ? (
                     <Card
                       card={creature}
                       size="sm"
                       isValidTarget={!!isTargetValid}
-                      isReadyToAttack={isP2Ready}
-                      isExhausted={isP2Turn && (!creature.canAttack || creature.hasAttackedThisTurn)}
-                      isSelectedAttacker={isP2AttackerSelected}
-                      isAscensionCandidate={isP2Ascendable}
                       onInspect={onInspectCard}
-                      onClick={() => handleBoardCreatureClick(creature, 2, laneIdx)}
+                      onClick={() => handleBoardCreatureClick(creature, topPlayerId, laneIdx)}
                     />
                   ) : (
                     <span className="lane-placeholder-num font-mono text-base sm:text-xl font-black text-slate-800 select-none">
@@ -754,20 +703,20 @@ export function BattleArena({
               );
             })}
 
-            {/* Player 2 Visual Graveyard Zone Slot */}
+            {/* Top Opponent Visual Graveyard Zone Slot */}
             {(() => {
-              const p2Grave = gameState.players[1].graveyard;
-              const topCard = p2Grave.length > 0 ? p2Grave[p2Grave.length - 1] : null;
+              const topGrave = topPlayer.graveyard;
+              const topCard = topGrave.length > 0 ? topGrave[topGrave.length - 1] : null;
 
               return (
                 <div
                   className="creature-lane-slot graveyard-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 border-purple-800/80 bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 hover:border-purple-400 flex flex-col items-center justify-center relative transition-all cursor-pointer shadow-lg group"
-                  onClick={() => setViewingGraveyardPlayer(2)}
-                  title="Click to inspect Player 2 Graveyard"
+                  onClick={() => setViewingGraveyardPlayer(topPlayerId)}
+                  title={`Click to inspect ${topPlayer.name} Graveyard`}
                 >
                   <div className="absolute -top-2.5 sm:-top-3 z-30 bg-purple-900 border border-purple-500 text-purple-200 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
                     <span>🪦</span>
-                    <span>GRAVEYARD ({p2Grave.length})</span>
+                    <span>GRAVEYARD ({topGrave.length})</span>
                   </div>
 
                   {topCard ? (
@@ -776,7 +725,7 @@ export function BattleArena({
                         card={topCard}
                         size="sm"
                         onInspect={onInspectCard}
-                        onClick={() => setViewingGraveyardPlayer(2)}
+                        onClick={() => setViewingGraveyardPlayer(topPlayerId)}
                       />
                       <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-transparent transition-colors pointer-events-none" />
                     </div>
@@ -885,48 +834,39 @@ export function BattleArena({
         </div>
 
         {/* =========================================================================
-            PLAYER 1 ZONE (BOTTOM)
+            FRIENDLY / ACTIVE ZONE (BOTTOM) - Perspective Aligned
             ========================================================================= */}
-        <div className="player-mat-zone p1-zone flex flex-col gap-1.5 relative z-10">
-          {/* Player 1 Battlefield Lanes */}
-          <div className="lanes-container p1-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
-            {/* Player 1 Dedicated Champion Lane Slot */}
+        <div className="player-mat-zone bottom-zone flex flex-col gap-1.5 relative z-10">
+          {/* Bottom Battlefield Lanes */}
+          <div className="lanes-container bottom-lanes flex justify-center gap-1.5 sm:gap-2.5 md:gap-3 py-1">
+            {/* Bottom Dedicated Champion Lane Slot */}
             {(() => {
-              const p1ChampLane = gameState.players[0].championLane;
-              const isTurn = isPlayer1Turn;
-              const isChampPlayable = selectedHandCardId && isTurn && (selectedCardInHand?.id.includes('_champion') || selectedCardInHand?.desc?.includes('Dedicated Champion Lane'));
+              const bottomChampLane = bottomPlayer.championLane;
+              const isChampPlayable = selectedHandCardId && isBottomPlayerTurn && (selectedCardInHand?.id.includes('_champion') || selectedCardInHand?.desc?.includes('Dedicated Champion Lane'));
 
               return (
                 <div
                   className={`creature-lane-slot champion-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 flex items-center justify-center relative transition-all cursor-pointer ${
-                    p1ChampLane
+                    bottomChampLane
                       ? 'border-amber-400 bg-gradient-to-b from-amber-950/40 via-slate-900 to-amber-950/30 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
                       : isChampPlayable
                       ? 'border-amber-400 bg-amber-950/40 ring-2 ring-amber-400/70 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.8)]'
                       : 'border-dashed border-amber-500/40 bg-slate-950/60 hover:border-amber-400/70'
                   }`}
                   onClick={() => {
-                    if (isTurn) {
-                      if (!p1ChampLane && selectedHandCardId) {
+                    if (isBottomPlayerTurn) {
+                      if (!bottomChampLane && selectedHandCardId) {
                         dispatchAction({ type: 'playCard', instanceId: selectedHandCardId, targetLaneIndex: 'champion' });
                         clearSelections();
-                      } else if (p1ChampLane) {
-                        handleBoardCreatureClick(p1ChampLane, 1, -1);
+                      } else if (bottomChampLane) {
+                        handleBoardCreatureClick(bottomChampLane, bottomPlayerId, -1);
                       }
-                    } else if (p1ChampLane && selectedAttackerId && !isPlayer1Turn) {
-                      dispatchAction({
-                        type: 'declareAttack',
-                        attackerInstanceId: selectedAttackerId,
-                        targetType: 'champion_lane',
-                        targetLaneOrId: null
-                      });
-                      clearSelections();
                     }
                   }}
-                  onDragOver={e => { if (isTurn) e.preventDefault(); }}
+                  onDragOver={e => { if (isBottomPlayerTurn) e.preventDefault(); }}
                   onDrop={e => {
                     e.preventDefault();
-                    if (draggedCardId && isTurn) {
+                    if (draggedCardId && isBottomPlayerTurn) {
                       dispatchAction({ type: 'playCard', instanceId: draggedCardId, targetLaneIndex: 'champion' });
                       clearSelections();
                     }
@@ -938,14 +878,14 @@ export function BattleArena({
                     <span>CHAMPION</span>
                   </div>
 
-                  {p1ChampLane ? (
+                  {bottomChampLane ? (
                     <Card
-                      card={p1ChampLane}
+                      card={bottomChampLane}
                       size="sm"
-                      isValidTarget={!!selectedAttackerId && !isPlayer1Turn}
-                      isReadyToAttack={isTurn && p1ChampLane.canAttack && !p1ChampLane.hasAttackedThisTurn && !p1ChampLane.frozen}
-                      isExhausted={isTurn && (!p1ChampLane.canAttack || p1ChampLane.hasAttackedThisTurn)}
-                      isSelectedAttacker={p1ChampLane.instanceId === selectedAttackerId && isTurn}
+                      isValidTarget={false}
+                      isReadyToAttack={isBottomPlayerTurn && bottomChampLane.canAttack && !bottomChampLane.hasAttackedThisTurn && !bottomChampLane.frozen}
+                      isExhausted={isBottomPlayerTurn && (!bottomChampLane.canAttack || bottomChampLane.hasAttackedThisTurn)}
+                      isSelectedAttacker={bottomChampLane.instanceId === selectedAttackerId && isBottomPlayerTurn}
                       onInspect={onInspectCard}
                     />
                   ) : (
@@ -957,54 +897,49 @@ export function BattleArena({
                 </div>
               );
             })()}
-            {gameState.players[0].board.map((creature, laneIdx) => {
-              const isTargetCandidate = !!selectedAttackerId && !isPlayer1Turn;
-              const isTaunter = creature && creature.hasTaunt;
-              const isTargetValid = isTargetCandidate && (p1Taunters.length === 0 || isTaunter);
 
-              const isTurn = isPlayer1Turn;
-              const isReady = !!(isTurn && creature && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen);
-              const isAttackerSelected = !!(creature && creature.instanceId === selectedAttackerId && isTurn);
+            {/* Bottom 5 Creature Lanes */}
+            {bottomPlayer.board.map((creature, laneIdx) => {
+              const isReady = !!(isBottomPlayerTurn && creature && creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen);
+              const isAttackerSelected = !!(creature && creature.instanceId === selectedAttackerId && isBottomPlayerTurn);
 
               const isAscendable = !!(
-                isTurn &&
+                isBottomPlayerTurn &&
                 selectedCardInHand &&
                 creature &&
                 canAscendOnUnit(selectedCardInHand, creature) &&
-                calculateAscensionCost(selectedCardInHand, creature) <= activePlayer.mana
+                calculateAscensionCost(selectedCardInHand, creature) <= bottomMana
               );
               const evoDiscount = isAscendable && selectedCardInHand && creature
                 ? Math.max(0, selectedCardInHand.cost - calculateAscensionCost(selectedCardInHand, creature))
                 : 0;
 
-              const isRippleActive = dropImpactSlot?.player === 1 && dropImpactSlot?.lane === laneIdx;
+              const isRippleActive = dropImpactSlot?.player === bottomPlayerId && dropImpactSlot?.lane === laneIdx;
 
               return (
                 <div
-                  key={`p1_lane_${laneIdx}`}
+                  key={`bottom_lane_${laneIdx}`}
                   className={`creature-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border flex items-center justify-center relative transition-all cursor-pointer ${
                     creature
                       ? isAscendable
                         ? 'border-amber-400 ring-2 ring-amber-400/70 shadow-[0_0_20px_rgba(245,158,11,0.6)]'
                         : 'border-transparent'
-                      : selectedHandCardId && isPlayer1Turn
+                      : selectedHandCardId && isBottomPlayerTurn
                       ? 'border-sky-500/80 bg-sky-950/30 ring-2 ring-sky-400/50 animate-pulse'
                       : 'border-dashed border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
                   }`}
                   onClick={() => {
-                    if (isTurn) {
-                      if (!creature) handleLaneSlotClick(laneIdx, 1);
-                      else handleBoardCreatureClick(creature, 1, laneIdx);
-                    } else {
-                      if (creature) handleBoardCreatureClick(creature, 1, laneIdx);
+                    if (isBottomPlayerTurn) {
+                      if (!creature) handleLaneSlotClick(laneIdx, bottomPlayerId);
+                      else handleBoardCreatureClick(creature, bottomPlayerId, laneIdx);
                     }
                   }}
                   onDragOver={e => {
-                    if (isTurn) e.preventDefault();
+                    if (isBottomPlayerTurn) e.preventDefault();
                   }}
                   onDrop={e => {
                     e.preventDefault();
-                    if (draggedCardId && isTurn) {
+                    if (draggedCardId && isBottomPlayerTurn) {
                       dispatchAction({
                         type: 'playCard',
                         instanceId: draggedCardId,
@@ -1034,13 +969,13 @@ export function BattleArena({
                     <Card
                       card={creature}
                       size="sm"
-                      isValidTarget={!!isTargetValid}
+                      isValidTarget={false}
                       isReadyToAttack={isReady}
-                      isExhausted={isTurn && (!creature.canAttack || creature.hasAttackedThisTurn)}
+                      isExhausted={isBottomPlayerTurn && (!creature.canAttack || creature.hasAttackedThisTurn)}
                       isSelectedAttacker={isAttackerSelected}
                       isAscensionCandidate={isAscendable}
                       onInspect={onInspectCard}
-                      onClick={() => handleBoardCreatureClick(creature, 1, laneIdx)}
+                      onClick={() => handleBoardCreatureClick(creature, bottomPlayerId, laneIdx)}
                     />
                   ) : (
                     <span className="lane-placeholder-num font-mono text-base sm:text-xl font-black text-slate-800 select-none">
@@ -1051,20 +986,20 @@ export function BattleArena({
               );
             })}
 
-            {/* Player 1 Visual Graveyard Zone Slot */}
+            {/* Bottom Visual Graveyard Zone Slot */}
             {(() => {
-              const p1Grave = gameState.players[0].graveyard;
-              const topCard = p1Grave.length > 0 ? p1Grave[p1Grave.length - 1] : null;
+              const bottomGrave = bottomPlayer.graveyard;
+              const topCard = bottomGrave.length > 0 ? bottomGrave[bottomGrave.length - 1] : null;
 
               return (
                 <div
                   className="creature-lane-slot graveyard-lane-slot w-[60px] h-[88px] sm:w-[95px] sm:h-[135px] md:w-[125px] md:h-[175px] lg:w-[135px] lg:h-[190px] rounded-xl border-2 border-purple-800/80 bg-gradient-to-b from-purple-950/40 via-slate-950 to-slate-950 hover:border-purple-400 flex flex-col items-center justify-center relative transition-all cursor-pointer shadow-lg group"
-                  onClick={() => setViewingGraveyardPlayer(1)}
-                  title="Click to inspect Player 1 Graveyard"
+                  onClick={() => setViewingGraveyardPlayer(bottomPlayerId)}
+                  title={`Click to inspect ${bottomPlayer.name} Graveyard`}
                 >
                   <div className="absolute -top-2.5 sm:-top-3 z-30 bg-purple-900 border border-purple-500 text-purple-200 px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black font-mono shadow flex items-center gap-0.5 pointer-events-none">
                     <span>🪦</span>
-                    <span>GRAVEYARD ({p1Grave.length})</span>
+                    <span>GRAVEYARD ({bottomGrave.length})</span>
                   </div>
 
                   {topCard ? (
@@ -1073,7 +1008,7 @@ export function BattleArena({
                         card={topCard}
                         size="sm"
                         onInspect={onInspectCard}
-                        onClick={() => setViewingGraveyardPlayer(1)}
+                        onClick={() => setViewingGraveyardPlayer(bottomPlayerId)}
                       />
                       <div className="absolute inset-0 bg-slate-950/20 group-hover:bg-transparent transition-colors pointer-events-none" />
                     </div>
@@ -1089,22 +1024,22 @@ export function BattleArena({
             })()}
           </div>
 
-          {/* Player 1 Hand (Fanned Out with Hearthstone Arc & Green Playable Aura) */}
+          {/* Bottom Player Hand (Fanned Out with Hearthstone Arc & Green Playable Aura) */}
           {isMobileHandExpanded && (
-            <div className="hand-container p1-hand flex justify-center items-center gap-[-14px] min-h-[105px] sm:min-h-[135px] py-1">
-              {gameState.players[0].hand.map((card, idx) => {
-                const isSelected = selectedHandCardId === card.instanceId && isPlayer1Turn;
-                const total = gameState.players[0].hand.length;
+            <div className="hand-container bottom-hand flex justify-center items-center gap-[-14px] min-h-[105px] sm:min-h-[135px] py-1">
+              {bottomPlayer.hand.map((card, idx) => {
+                const isSelected = selectedHandCardId === card.instanceId && isBottomPlayerTurn;
+                const total = bottomPlayer.hand.length;
                 const mid = (total - 1) / 2;
                 const fanAngle = total > 1 ? (idx - mid) * 3 : 0;
                 const fanY = total > 1 ? Math.abs(idx - mid) * 2 : 0;
 
                 // Hearthstone Playable Green Glow: card cost <= mana and friendly turn
-                const isCardPlayable = !hideP1Hand && isPlayer1Turn && card.cost <= p1Mana;
+                const isCardPlayable = !hideBottomHand && isBottomPlayerTurn && card.cost <= bottomMana;
 
                 return (
                   <div
-                    key={card.instanceId || `p1_card_${idx}`}
+                    key={card.instanceId || `bottom_card_${idx}`}
                     style={{
                       transform: isSelected
                         ? 'translateY(-24px) scale(1.15) rotate(0deg)'
@@ -1117,21 +1052,21 @@ export function BattleArena({
                   >
                     <Card
                       card={card}
-                      isFaceDown={hideP1Hand}
-                      size={isPlayer1Turn ? 'md' : 'sm'}
+                      isFaceDown={hideBottomHand}
+                      size={isBottomPlayerTurn ? 'md' : 'sm'}
                       isPlayable={isCardPlayable}
-                      draggable={isPlayer1Turn && !hideP1Hand}
+                      draggable={isBottomPlayerTurn && !hideBottomHand}
                       equippedCardBack={equippedCosmetics?.cardBack}
                       equippedFoilStyle={equippedCosmetics?.foilStyle}
                       onDragStart={() => {
-                        if (isPlayer1Turn && !hideP1Hand) {
+                        if (isBottomPlayerTurn && !hideBottomHand) {
                           setDraggedCardId(card.instanceId);
                           setSelectedHandCardId(card.instanceId);
                         }
                       }}
                       onInspect={onInspectCard}
                       onClick={() => {
-                        if (!hideP1Hand) handleCardClick(card, 1);
+                        if (!hideBottomHand) handleCardClick(card, bottomPlayerId);
                       }}
                     />
                   </div>
@@ -1140,25 +1075,23 @@ export function BattleArena({
             </div>
           )}
 
-          {/* Player 1 Mat Row (Hearthstone Hero Portrait, Mana Tray, Wards) */}
+          {/* Bottom Player Mat Row (Hearthstone Hero Portrait, Mana Tray, Wards) */}
           <div className="mat-row flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap pt-1">
-            {/* Hearthstone Oval Hero Portrait Frame (P1) */}
+            {/* Hearthstone Oval Hero Portrait Frame (Bottom Player) */}
             <div
               className={`champion-portrait-wrap flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 to-slate-950 border-2 rounded-2xl p-1.5 sm:p-2 shadow-xl cursor-pointer transition-all ${
-                selectedAttackerId && !isPlayer1Turn && p1Taunters.length === 0
-                  ? 'border-red-500 ring-4 ring-red-500/60 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.7)]'
-                  : isPlayer1Turn
+                isBottomPlayerTurn
                   ? 'border-amber-400/80 shadow-[0_0_18px_rgba(245,158,11,0.4)]'
                   : 'border-slate-800 hover:border-slate-700'
               }`}
-              onClick={() => handleChampionClick(1)}
-              title={selectedAttackerId && !isPlayer1Turn ? 'Click to declare DIRECT ATTACK on enemy Champion!' : 'Champion Command Zone'}
+              onClick={() => handleChampionClick(bottomPlayerId)}
+              title="Champion Command Zone"
             >
               {/* Hearthstone Oval Hero Token */}
               <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full overflow-hidden border-2 border-amber-400 shadow-md flex-shrink-0 bg-slate-950">
                 <Image
-                  src={p1Champ.avatar}
-                  alt={p1Champ.name}
+                  src={bottomChamp.avatar}
+                  alt={bottomChamp.name}
                   fill
                   sizes="52px"
                   priority
@@ -1166,7 +1099,7 @@ export function BattleArena({
                 />
                 {/* Hearthstone Blood-Red Health Badge */}
                 <div className="absolute bottom-0 right-0 bg-gradient-to-br from-red-600 to-rose-700 text-white font-mono font-black text-[10px] sm:text-xs px-1.5 rounded-tl-md border-t border-l border-red-300 drop-shadow flex items-center justify-center">
-                  {p1Champ.hp}
+                  {bottomChamp.hp}
                 </div>
               </div>
 
@@ -1175,7 +1108,7 @@ export function BattleArena({
                 <div className="flex items-center gap-1">
                   <Crown className="w-3 h-3 text-amber-400 flex-shrink-0" />
                   <span className="text-xs sm:text-sm font-bold text-white truncate max-w-[90px] sm:max-w-[130px]">
-                    {gameState.players[0].name}
+                    {bottomPlayer.name}
                   </span>
                   {totalSpentUSD > 0 && (
                     <span
@@ -1187,48 +1120,46 @@ export function BattleArena({
                   )}
                 </div>
                 <span className="text-[10px] text-amber-300 font-mono truncate max-w-[90px] sm:max-w-[130px]">
-                  {p1Champ.name}
+                  {bottomChamp.name}
                 </span>
               </div>
 
-              {/* Commander Power Medallion (P1) */}
+              {/* Commander Power Medallion (Bottom Player) */}
               <button
                 type="button"
                 disabled={
-                  p1Champ.heroPowerUsed ||
-                  p1Mana < p1Champ.heroPower.cost ||
-                  !isPlayer1Turn ||
-                  !isMyTurn ||
-                  (localPlayerNumber ? localPlayerNumber !== 1 : false)
+                  bottomChamp.heroPowerUsed ||
+                  bottomMana < bottomChamp.heroPower.cost ||
+                  !isBottomPlayerTurn ||
+                  !isMyTurn
                 }
                 onClick={() => {
-                  if (isPlayer1Turn && isMyTurn && (localPlayerNumber ? localPlayerNumber === 1 : true)) {
+                  if (isBottomPlayerTurn && isMyTurn) {
                     dispatchAction({ type: 'activateHeroPower' });
                   }
                 }}
                 className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
-                  !p1Champ.heroPowerUsed &&
-                  p1Mana >= p1Champ.heroPower.cost &&
-                  isPlayer1Turn &&
-                  isMyTurn &&
-                  (localPlayerNumber ? localPlayerNumber === 1 : true)
+                  !bottomChamp.heroPowerUsed &&
+                  bottomMana >= bottomChamp.heroPower.cost &&
+                  isBottomPlayerTurn &&
+                  isMyTurn
                     ? 'bg-gradient-to-br from-indigo-900 to-blue-900 border-amber-400 text-sky-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
                     : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
                 }`}
-                title={`Commander Power (2 Mana): ${p1Champ.heroPower.name} - ${p1Champ.heroPower.desc}`}
+                title={`Commander Power (${bottomChamp.heroPower.cost} Mana): ${bottomChamp.heroPower.name} - ${bottomChamp.heroPower.desc}`}
               >
                 <Zap className="w-4 h-4 text-amber-300" />
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold border border-blue-300 shadow">
-                  2
+                  {bottomChamp.heroPower.cost || 2}
                 </span>
               </button>
             </div>
 
-            {/* Secret Wards (P1) */}
+            {/* Secret Wards (Bottom Player) */}
             <div className="secret-wards-row flex items-center gap-1.5">
-              {gameState.players[0].wards.map((ward, idx) => (
+              {bottomPlayer.wards.map((ward, idx) => (
                 <div
-                  key={`p1_ward_${idx}`}
+                  key={`bottom_ward_${idx}`}
                   className={`ward-slot-chip w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center text-xs transition-all ${
                     ward
                       ? 'border-purple-500 bg-purple-950/80 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.6)] animate-pulse'
@@ -1241,18 +1172,18 @@ export function BattleArena({
               ))}
             </div>
 
-            {/* Hearthstone Chunky Mana Tray & Piles (P1) */}
+            {/* Hearthstone Chunky Mana Tray & Piles (Bottom Player) */}
             <div className="flex items-center gap-2">
               <div className="mana-tray-hearthstone flex items-center gap-1.5 bg-slate-950/90 border border-sky-500/40 px-2.5 py-1 rounded-xl shadow-inner">
                 <span className="font-mono text-xs font-black text-sky-400 flex items-center gap-0.5">
-                  💎 {p1Mana}/{p1MaxMana}
+                  💎 {bottomMana}/{bottomMaxMana}
                 </span>
                 <div className="hidden sm:flex gap-1">
-                  {Array.from({ length: p1MaxMana }).map((_, i) => (
+                  {Array.from({ length: bottomMaxMana }).map((_, i) => (
                     <div
-                      key={`p1_gem_${i}`}
+                      key={`bottom_gem_${i}`}
                       className={`w-2 h-3 rounded-xs border ${
-                        i < p1Mana
+                        i < bottomMana
                           ? 'bg-gradient-to-b from-cyan-300 to-blue-600 border-cyan-200 shadow-[0_0_6px_rgba(34,211,238,0.8)]'
                           : 'bg-slate-800/60 border-slate-700'
                       }`}
@@ -1265,16 +1196,16 @@ export function BattleArena({
               <div className="flex gap-1.5 text-[9px] font-mono">
                 <div className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-400">
                   <span className="text-[8px]">DECK</span>
-                  <span className="font-bold text-white text-[10px]">{gameState.players[0].deck.length}</span>
+                  <span className="font-bold text-white text-[10px]">{bottomPlayer.deck.length}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setViewingGraveyardPlayer(1)}
+                  onClick={() => setViewingGraveyardPlayer(bottomPlayerId)}
                   className="w-8 h-11 sm:w-9 sm:h-13 rounded bg-slate-900 border border-purple-900/60 hover:border-purple-400 flex flex-col items-center justify-center text-purple-300 transition-colors cursor-pointer shadow"
-                  title="View Player 1 Graveyard"
+                  title={`View ${bottomPlayer.name} Graveyard`}
                 >
                   <span className="text-[8px] flex items-center gap-0.5">🪦 GRAVE</span>
-                  <span className="font-bold text-white text-[10px]">{gameState.players[0].graveyard.length}</span>
+                  <span className="font-bold text-white text-[10px]">{bottomPlayer.graveyard.length}</span>
                 </button>
               </div>
             </div>

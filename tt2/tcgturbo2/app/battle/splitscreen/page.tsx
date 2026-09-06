@@ -105,20 +105,23 @@ export default function SplitscreenPage() {
         p2Name: config.p2Name,
         isP2AI: isAI
       });
-      setPrivacyCurtainEnabled(isAI ? false : config.privacyCurtain);
+      const effectivePrivacy = isAI ? false : config.privacyCurtain;
+      setPrivacyCurtainEnabled(effectivePrivacy);
 
       const newGame = createInitialGame(
         isAI ? 'solo_ai' : 'couch_2p',
         config.p1DeckKey,
         config.p2DeckKey,
         config.customP1Cards || customP1Deck,
-        config.customP2Cards || customP2Deck
+        config.customP2Cards || customP2Deck,
+        effectivePrivacy
       );
 
       newGame.players[0].name = config.p1Name;
       newGame.players[1].name = config.p2Name;
       newGame.players[1].isAI = isAI;
-      if (isAI) {
+      newGame.privacyCurtainEnabled = effectivePrivacy;
+      if (!effectivePrivacy) {
         newGame.isPrivacyCurtainActive = false;
       }
 
@@ -196,12 +199,7 @@ export default function SplitscreenPage() {
           if (current.isPrivacyCurtainActive) {
             return revealPrivacyAndStartTurn(current);
           } else if (!current.players[current.currentTurn - 1].isAI) {
-            const next = endTurn(current);
-            // Only activate privacy curtain if enabled in match settings
-            if (!privacyCurtainEnabled) {
-              return { ...next, isPrivacyCurtainActive: false };
-            }
-            return next;
+            return endTurn(current);
           }
           return current;
         });

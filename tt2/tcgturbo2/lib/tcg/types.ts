@@ -112,6 +112,7 @@ export interface GameState {
   currentTurn: 1 | 2;
   phase: TurnPhase;
   isPrivacyCurtainActive: boolean;
+  privacyCurtainEnabled?: boolean;
   winner: null | 1 | 2 | 'draw';
   players: [PlayerState, PlayerState];
   actionLogs: ActionLog[];

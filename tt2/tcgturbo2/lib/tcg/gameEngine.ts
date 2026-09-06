@@ -92,7 +92,8 @@ export function createInitialGame(
   p1DeckKey: string = 'solar_pyre',
   p2DeckKey: string = 'void_shadow',
   customP1Cards?: string[],
-  customP2Cards?: string[]
+  customP2Cards?: string[],
+  privacyCurtainEnabled: boolean = true
 ): GameState {
   rngSeed = 1337;
   const p1Preset = PRESET_DECKS[p1DeckKey] || PRESET_DECKS.solar_pyre;
@@ -110,6 +111,7 @@ export function createInitialGame(
     currentTurn: 1,
     phase: 'draw',
     isPrivacyCurtainActive: false,
+    privacyCurtainEnabled,
     winner: null,
     players: [p1, p2],
     actionLogs: [],
@@ -1130,7 +1132,7 @@ export function endTurn(state: GameState): GameState {
   const nextTurnId = state.currentTurn === 1 ? 2 : 1;
   const nextRound = nextTurnId === 1 ? state.round + 1 : state.round;
 
-  if (state.mode === 'couch_2p') {
+  if (state.mode === 'couch_2p' && state.privacyCurtainEnabled !== false) {
     return {
       ...state,
       currentTurn: nextTurnId,

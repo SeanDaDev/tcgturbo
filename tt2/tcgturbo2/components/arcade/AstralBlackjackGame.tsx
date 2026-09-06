@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { soundEngine } from '@/lib/tcg/soundEngine';
-import { ArrowLeft, Sparkles, RotateCcw, Award, Zap, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Sparkles, Zap, ShieldAlert } from 'lucide-react';
 
 interface BlackjackCard {
   suit: '🔥' | '🌑' | '🌿' | '🌊';
@@ -113,7 +113,7 @@ export function AstralBlackjackGame({ onBackToArcade, onLaunchMainGame }: Astral
     soundEngine.playHover();
     setGameStatus('dealer_turn');
 
-    let currentDealer = [...dealerHand];
+    const currentDealer = [...dealerHand];
     let dealerScore = calculateHandScore(currentDealer);
 
     while (dealerScore < 17) {

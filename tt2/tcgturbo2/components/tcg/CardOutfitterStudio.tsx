@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from './Card';
 import { CardDef, ElementType, CardType, Rarity, Keyword } from '@/lib/tcg/types';
-import { CARDS_DATA } from '@/lib/tcg/cardsData';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import {
   Wand2,
@@ -11,14 +10,10 @@ import {
   Save,
   Trash2,
   Download,
-  Upload,
-  Play,
   RotateCcw,
-  CheckCircle2,
-  Shield,
-  Zap,
   Layers,
   Sword,
+  Swords,
   Heart
 } from 'lucide-react';
 
@@ -184,6 +179,19 @@ export function CardOutfitterStudio({ onTestCardInBattle, onInspectCard }: CardO
           </div>
 
           <div className="flex items-center gap-3">
+            {onTestCardInBattle && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playTurnChime();
+                  onTestCardInBattle(previewCard);
+                }}
+                className="btn bg-sky-600 hover:bg-sky-500 text-white font-mono text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 hover:scale-105 transition-transform"
+              >
+                <Swords className="w-4 h-4 text-sky-200" />
+                <span>Test in Battle</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSaveCard}

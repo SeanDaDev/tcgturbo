@@ -372,14 +372,14 @@ export function advancePhase(state: GameState): GameState {
   if (state.phase === 'draw') {
     return drawCardTurn(state);
   } else if (state.phase === 'main') {
-    let nextState: GameState = {
+    const nextState: GameState = {
       ...state,
       phase: 'combat'
     };
     soundEngine.playTurnChime();
     return logMessage(nextState, `${active.name} enters Combat Phase! Declare your attacks.`, 'log-turn');
   } else if (state.phase === 'combat') {
-    let nextState: GameState = {
+    const nextState: GameState = {
       ...state,
       phase: 'end'
     };
@@ -483,7 +483,7 @@ export function playCard(
   // Check lane & ascension
   let lane: number | null = typeof targetLaneIndex === 'number' && targetLaneIndex >= 0 && targetLaneIndex <= 4 ? targetLaneIndex : null;
   let existingUnit = lane !== null ? active.board[lane] : null;
-  let isAscending = existingUnit ? canAscendOnUnit(card, existingUnit) : false;
+  const isAscending = existingUnit ? canAscendOnUnit(card, existingUnit) : false;
 
   // If targeted lane is occupied and cannot ascend, redirect to an empty lane or reject safely
   if (existingUnit && !isAscending) {
@@ -732,7 +732,7 @@ export function declareAttack(
   const active = state.players[activeIndex];
   const opponent = state.players[opponentIndex];
 
-  let attackerLane = active.board.findIndex(c => c && c.instanceId === attackerInstanceId);
+  const attackerLane = active.board.findIndex(c => c && c.instanceId === attackerInstanceId);
   let isAttackerInChampLane = false;
   let attacker: CardInstance | null = null;
 
@@ -993,8 +993,8 @@ export function declareAttack(
       'log-attack'
     );
 
-    let defenderHp = defender.currentHp - attacker.currentAtk;
-    let attackerHp = attacker.currentHp - defender.currentAtk;
+    const defenderHp = defender.currentHp - attacker.currentAtk;
+    const attackerHp = attacker.currentHp - defender.currentAtk;
 
     const nextActiveBoard = [...nextState.players[activeIndex].board];
     let nextActiveChampLane = nextState.players[activeIndex].championLane;

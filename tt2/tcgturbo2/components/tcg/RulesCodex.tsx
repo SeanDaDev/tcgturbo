@@ -11,11 +11,8 @@ import {
   Sword,
   Compass,
   PlayCircle,
-  HelpCircle,
-  Clock,
   Layers,
-  Award,
-  ChevronRight
+  Award
 } from 'lucide-react';
 
 export function RulesCodex() {
@@ -47,7 +44,7 @@ export function RulesCodex() {
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-mono">
           <a href="#sec-objective" className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-sky-900/60 text-sky-300 border border-slate-700 transition-colors">1. Objective & Setup</a>
           <a href="#sec-turn-phases" className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-amber-900/60 text-amber-300 border border-slate-700 transition-colors">2. Turn Structure</a>
-          <a href="#sec-how-played" className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 font-bold transition-colors">⚡ How It's Played</a>
+          <a href="#sec-how-played" className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/60 font-bold transition-colors">⚡ How It&apos;s Played</a>
           <a href="#sec-ascension" className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-amber-900/60 text-amber-300 border border-slate-700 transition-colors">3. In-Place Ascension</a>
           <a href="#sec-keywords" className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-emerald-900/60 text-emerald-300 border border-slate-700 transition-colors">4. Keyword Glossary</a>
           <a href="#sec-wards" className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-purple-900/60 text-purple-300 border border-slate-700 transition-colors">5. Secret Wards</a>
@@ -144,7 +141,8 @@ export function RulesCodex() {
               • <strong>Maximum Mana Growth:</strong> Your Max Mana increases by <strong className="text-white">+1</strong> every round until reaching the hard cap of <strong className="text-white">10 Mana</strong>.<br />
               • <strong>Full Mana Replenishment:</strong> Available Mana refills to 100% of your current maximum.<br />
               • <strong>Draw Step:</strong> Automatically draw 1 card from your deck (subject to 8-card hand limit and fatigue).<br />
-              • <strong>Awaken & Thaw:</strong> Friendly creatures recover from summoning sickness and ready their attacks. Any creature frozen from the prior turn thaws out.
+              • <strong>Awaken & Thaw:</strong> Friendly creatures recover from being <strong className="text-amber-300">Exhausted</strong> and ready their attacks. Any creature frozen from the prior turn thaws out.<br />
+              • <strong>Persistent Damage:</strong> Health and battle damage taken by creatures and commanders are <strong className="text-rose-400">permanent</strong> across turns—damage does not reset at the end of the round!
             </p>
           </div>
 
@@ -336,7 +334,7 @@ export function RulesCodex() {
         <div className="bg-slate-950/80 border-l-4 border-sky-400 p-4 rounded-r-xl">
           <strong className="text-sky-300 text-sm md:text-base block mb-2">Ascension Rush & Ascension Bursts</strong>
           <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
-            • <strong>Immediate Attack (Ascension Rush):</strong> Unlike freshly summoned units that experience summoning sickness, an Ascended creature can attack immediately on the turn it evolves!<br />
+            • <strong>Immediate Attack (Ascension Rush):</strong> Unlike freshly summoned units that enter the battlefield <strong className="text-amber-300">Exhausted</strong>, an Ascended creature can attack immediately on the turn it evolves!<br />
             • <strong>Ascension Bursts:</strong> High-tier titans trigger catastrophic board effects upon arrival (e.g., <em>Ignis Apex</em> deals 3 AoE damage to all enemy units; <em>Tethys</em> freezes all enemy lanes).
           </p>
         </div>

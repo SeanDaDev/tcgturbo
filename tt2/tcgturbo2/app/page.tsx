@@ -107,6 +107,11 @@ export default function Home() {
         {activeTab === 'outfitter' && (
           <CardOutfitterStudio
             onInspectCard={card => setInspectedCard(card)}
+            onTestCardInBattle={() => {
+              if (typeof window !== 'undefined') {
+                window.location.href = '/battle/splitscreen';
+              }
+            }}
           />
         )}
       </main>

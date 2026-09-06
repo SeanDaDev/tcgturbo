@@ -22,6 +22,7 @@ import {
 import { executeAiTurn } from '@/lib/tcg/aiPlayer';
 import { GameState, CardDef, CardInstance } from '@/lib/tcg/types';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
+import { PRESET_DECKS } from '@/lib/tcg/presetDecks';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 
 import { PackOpenerModal } from '@/components/tcg/PackOpenerModal';
@@ -67,21 +68,23 @@ export default function SplitscreenPage() {
     p2DeckKey: string;
     p1Name: string;
     p2Name: string;
+    isP2AI?: boolean;
   }>({
     p1DeckKey: 'solar_pyre',
     p2DeckKey: 'void_shadow',
     p1Name: 'Player 1',
-    p2Name: 'Player 2'
+    p2Name: 'AI Tactician',
+    isP2AI: true
   });
 
   const [gameState, setGameState] = useState<GameState>(() =>
-    createInitialGame('couch_2p', 'solar_pyre', 'void_shadow')
+    createInitialGame('solo_ai', 'solar_pyre', 'void_shadow')
   );
 
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
-  // Launch Couch Duel with Selected Decks
+  // Launch Duel with Selected Decks (Solo vs AI or Couch 2P)
   const handleStartCustomDuel = useCallback(
     (config: {
       p1DeckKey: string;
@@ -91,18 +94,21 @@ export default function SplitscreenPage() {
       privacyCurtain: boolean;
       customP1Cards?: string[];
       customP2Cards?: string[];
+      isP2AI?: boolean;
     }) => {
       soundEngine.playTurnChime();
+      const isAI = !!config.isP2AI;
       setLastDeckConfig({
         p1DeckKey: config.p1DeckKey,
         p2DeckKey: config.p2DeckKey,
         p1Name: config.p1Name,
-        p2Name: config.p2Name
+        p2Name: config.p2Name,
+        isP2AI: isAI
       });
-      setPrivacyCurtainEnabled(config.privacyCurtain);
+      setPrivacyCurtainEnabled(isAI ? false : config.privacyCurtain);
 
       const newGame = createInitialGame(
-        'couch_2p',
+        isAI ? 'solo_ai' : 'couch_2p',
         config.p1DeckKey,
         config.p2DeckKey,
         config.customP1Cards || customP1Deck,
@@ -111,7 +117,10 @@ export default function SplitscreenPage() {
 
       newGame.players[0].name = config.p1Name;
       newGame.players[1].name = config.p2Name;
-      newGame.players[1].isAI = false;
+      newGame.players[1].isAI = isAI;
+      if (isAI) {
+        newGame.isPrivacyCurtainActive = false;
+      }
 
       setGameState(newGame);
       setIsDeckSelectOpen(false);
@@ -126,7 +135,8 @@ export default function SplitscreenPage() {
       ...lastDeckConfig,
       privacyCurtain: privacyCurtainEnabled,
       customP1Cards: customP1Deck,
-      customP2Cards: customP2Deck
+      customP2Cards: customP2Deck,
+      isP2AI: lastDeckConfig.isP2AI
     });
   }, [handleStartCustomDuel, lastDeckConfig, privacyCurtainEnabled, customP1Deck, customP2Deck]);
 
@@ -285,7 +295,8 @@ export default function SplitscreenPage() {
                 p1Name: 'Player 1',
                 p2Name: 'AI Tactician',
                 privacyCurtain: false,
-                customP1Cards: cards
+                customP1Cards: cards,
+                isP2AI: true
               });
             }}
           />
@@ -310,6 +321,17 @@ export default function SplitscreenPage() {
         {activeTab === 'outfitter' && (
           <CardOutfitterStudio
             onInspectCard={card => setInspectedCard(card)}
+            onTestCardInBattle={customCard => {
+              handleStartCustomDuel({
+                p1DeckKey: 'custom',
+                p2DeckKey: 'void_shadow',
+                p1Name: 'Player 1',
+                p2Name: 'AI Tactician',
+                privacyCurtain: false,
+                customP1Cards: [customCard.id, ...PRESET_DECKS.solar_pyre.cards.slice(1)],
+                isP2AI: true
+              });
+            }}
           />
         )}
       </main>

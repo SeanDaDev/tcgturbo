@@ -2,18 +2,15 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { ARCADE_GAMES, ArcadeGame } from '@/lib/arcade/gamesRegistry';
+import { ARCADE_GAMES } from '@/lib/arcade/gamesRegistry';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { AstralBlackjackGame } from './AstralBlackjackGame';
 import {
   Gamepad2,
-  Sparkles,
   Users,
   Play,
   Star,
   Flame,
-  ArrowRight,
-  ShieldCheck,
   Compass
 } from 'lucide-react';
 

@@ -11,7 +11,7 @@ import {
 } from '@/lib/tcg/gameEngine';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { getSupporterTier } from '@/lib/tcg/collectionEngine';
-import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown, ArrowRight, Layers } from 'lucide-react';
+import { Zap, ShieldAlert, Sparkles, User, Bot, RotateCcw, Swords, Crown, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react';
 
 interface BattleArenaProps {
   gameState: GameState;
@@ -164,6 +164,7 @@ export function BattleArena({
   // Card click handlers
   const handleCardClick = (card: CardInstance, playerId: 1 | 2) => {
     if (gameState.winner) return;
+    if (localPlayerNumber && localPlayerNumber !== playerId) return;
 
     // Friendly hand card clicked
     if (gameState.currentTurn === playerId) {
@@ -186,7 +187,7 @@ export function BattleArena({
   const handleBoardCreatureClick = (creature: CardInstance, playerId: 1 | 2, laneIdx: number) => {
     if (gameState.winner) return;
 
-    const isFriendly = gameState.currentTurn === playerId;
+    const isFriendly = gameState.currentTurn === playerId && (localPlayerNumber ? localPlayerNumber === playerId : true);
 
     if (isFriendly) {
       // In-place evolution check: if friendly hand card selected, attempt evolution
@@ -201,7 +202,7 @@ export function BattleArena({
       }
 
       // Ready attacker selection
-      if (creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen && !activePlayer.isAI) {
+      if (creature.canAttack && !creature.hasAttackedThisTurn && !creature.frozen && !activePlayer.isAI && (localPlayerNumber ? localPlayerNumber === playerId : true)) {
         if (selectedAttackerId === creature.instanceId) {
           clearSelections();
         } else {
@@ -282,9 +283,17 @@ export function BattleArena({
   const p1Champ = gameState.players[0].champion || gameState.players[0].vanguard;
   const p2Champ = gameState.players[1].champion || gameState.players[1].vanguard;
 
-  // Hand visibility in Couch Co-Op:
-  const hideP2Hand = (gameState.mode === 'couch_2p' && isPlayer1Turn) || gameState.players[1].isAI;
-  const hideP1Hand = gameState.mode === 'couch_2p' && !isPlayer1Turn;
+  // Hand visibility in Online vs Couch Co-Op:
+  const hideP1Hand = localPlayerNumber
+    ? localPlayerNumber !== 1
+    : gameState.mode === 'couch_2p' && !isPlayer1Turn;
+  const hideP2Hand = localPlayerNumber
+    ? localPlayerNumber !== 2
+    : (gameState.mode === 'couch_2p' && isPlayer1Turn) || gameState.players[1].isAI;
+
+  const isMyTurn = localPlayerNumber
+    ? localPlayerNumber === gameState.currentTurn
+    : !activePlayer.isAI;
 
   return (
     <div
@@ -451,16 +460,20 @@ export function BattleArena({
                   p2Champ.heroPowerUsed ||
                   p2Mana < p2Champ.heroPower.cost ||
                   isPlayer1Turn ||
-                  gameState.players[1].isAI
+                  !isMyTurn ||
+                  (localPlayerNumber ? localPlayerNumber !== 2 : false)
                 }
                 onClick={() => {
-                  if (!isPlayer1Turn) dispatchAction({ type: 'activateHeroPower' });
+                  if (!isPlayer1Turn && isMyTurn && (localPlayerNumber ? localPlayerNumber === 2 : true)) {
+                    dispatchAction({ type: 'activateHeroPower' });
+                  }
                 }}
                 className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
                   !p2Champ.heroPowerUsed &&
                   p2Mana >= p2Champ.heroPower.cost &&
                   !isPlayer1Turn &&
-                  !gameState.players[1].isAI
+                  isMyTurn &&
+                  (localPlayerNumber ? localPlayerNumber === 2 : true)
                     ? 'bg-gradient-to-br from-indigo-900 to-purple-900 border-amber-400 text-purple-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
                     : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
                 }`}
@@ -634,6 +647,7 @@ export function BattleArena({
                       size="sm"
                       isValidTarget={!!selectedAttackerId && isPlayer1Turn}
                       isReadyToAttack={isP2Turn && p2ChampLane.canAttack && !p2ChampLane.hasAttackedThisTurn && !p2ChampLane.frozen}
+                      isExhausted={isP2Turn && (!p2ChampLane.canAttack || p2ChampLane.hasAttackedThisTurn)}
                       isSelectedAttacker={p2ChampLane.instanceId === selectedAttackerId && isP2Turn}
                       onInspect={onInspectCard}
                     />
@@ -725,6 +739,7 @@ export function BattleArena({
                       size="sm"
                       isValidTarget={!!isTargetValid}
                       isReadyToAttack={isP2Ready}
+                      isExhausted={isP2Turn && (!creature.canAttack || creature.hasAttackedThisTurn)}
                       isSelectedAttacker={isP2AttackerSelected}
                       isAscensionCandidate={isP2Ascendable}
                       onInspect={onInspectCard}
@@ -802,9 +817,9 @@ export function BattleArena({
                 <div key={p.key} className="flex items-center gap-1">
                   <button
                     type="button"
-                    disabled={gameState.winner !== null || activePlayer.isAI}
+                    disabled={gameState.winner !== null || !isMyTurn}
                     onClick={() => {
-                      if (activePlayer.isAI || gameState.winner !== null) return;
+                      if (!isMyTurn || gameState.winner !== null) return;
                       if (isActive || (currentPhase === 'draw' && p.key === 'main')) {
                         dispatchAction({ type: 'advancePhase' });
                       } else if (currentPhase === 'main' && p.key === 'combat') {
@@ -836,9 +851,9 @@ export function BattleArena({
           {/* Dynamic Action Button */}
           <button
             type="button"
-            disabled={gameState.winner !== null || activePlayer.isAI}
+            disabled={gameState.winner !== null || !isMyTurn}
             onClick={() => {
-              if (activePlayer.isAI || gameState.winner !== null) return;
+              if (!isMyTurn || gameState.winner !== null) return;
               if (gameState.phase === 'draw') {
                 dispatchAction({ type: 'drawCard' });
               } else if (gameState.phase === 'main') {
@@ -850,8 +865,8 @@ export function BattleArena({
               }
             }}
             className={`hearthstone-end-turn-btn px-4 sm:px-6 md:px-8 py-2 sm:py-2.5 text-xs sm:text-sm md:text-base font-black font-serif tracking-wider uppercase ${
-              activePlayer.isAI
-                ? 'opponent-turn opacity-70'
+              !isMyTurn
+                ? 'opponent-turn opacity-70 cursor-not-allowed'
                 : gameState.phase === 'draw'
                 ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white animate-pulse shadow-[0_0_15px_rgba(37,99,235,0.7)]'
                 : gameState.phase === 'main'
@@ -859,8 +874,8 @@ export function BattleArena({
                 : 'text-yellow-100 animate-pulse'
             }`}
           >
-            {activePlayer.isAI
-              ? 'ENEMY TURN'
+            {!isMyTurn
+              ? 'OPPONENT TURN'
               : gameState.phase === 'draw'
               ? 'DRAW CARD 🃏'
               : gameState.phase === 'main'
@@ -929,6 +944,7 @@ export function BattleArena({
                       size="sm"
                       isValidTarget={!!selectedAttackerId && !isPlayer1Turn}
                       isReadyToAttack={isTurn && p1ChampLane.canAttack && !p1ChampLane.hasAttackedThisTurn && !p1ChampLane.frozen}
+                      isExhausted={isTurn && (!p1ChampLane.canAttack || p1ChampLane.hasAttackedThisTurn)}
                       isSelectedAttacker={p1ChampLane.instanceId === selectedAttackerId && isTurn}
                       onInspect={onInspectCard}
                     />
@@ -1020,6 +1036,7 @@ export function BattleArena({
                       size="sm"
                       isValidTarget={!!isTargetValid}
                       isReadyToAttack={isReady}
+                      isExhausted={isTurn && (!creature.canAttack || creature.hasAttackedThisTurn)}
                       isSelectedAttacker={isAttackerSelected}
                       isAscensionCandidate={isAscendable}
                       onInspect={onInspectCard}
@@ -1180,15 +1197,21 @@ export function BattleArena({
                 disabled={
                   p1Champ.heroPowerUsed ||
                   p1Mana < p1Champ.heroPower.cost ||
-                  !isPlayer1Turn
+                  !isPlayer1Turn ||
+                  !isMyTurn ||
+                  (localPlayerNumber ? localPlayerNumber !== 1 : false)
                 }
                 onClick={() => {
-                  if (isPlayer1Turn) dispatchAction({ type: 'activateHeroPower' });
+                  if (isPlayer1Turn && isMyTurn && (localPlayerNumber ? localPlayerNumber === 1 : true)) {
+                    dispatchAction({ type: 'activateHeroPower' });
+                  }
                 }}
                 className={`commander-power-medallion w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 flex flex-col items-center justify-center relative transition-all ${
                   !p1Champ.heroPowerUsed &&
                   p1Mana >= p1Champ.heroPower.cost &&
-                  isPlayer1Turn
+                  isPlayer1Turn &&
+                  isMyTurn &&
+                  (localPlayerNumber ? localPlayerNumber === 1 : true)
                     ? 'bg-gradient-to-br from-indigo-900 to-blue-900 border-amber-400 text-sky-200 hover:scale-110 shadow-[0_0_15px_rgba(251,191,36,0.7)] cursor-pointer'
                     : 'bg-slate-950 border-slate-800 text-slate-600 opacity-60 cursor-not-allowed'
                 }`}

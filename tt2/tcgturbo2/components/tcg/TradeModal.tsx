@@ -23,24 +23,33 @@ export function TradeModal({
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<string>('player_2');
   const [tradeMessage, setTradeMessage] = useState<string | null>(null);
+  // Bug 24: Trade session concurrency lock (PENDING_ACCEPT / FINALIZED)
+  const [isProcessingTrade, setIsProcessingTrade] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
   const eligibleCards = CARDS_DATA.filter(c => (collection.ownedCards[c.id] || 0) > 1);
   const selectedCardDef = CARDS_DATA.find(c => c.id === selectedCardId);
 
-  const handleSendGift = () => {
-    if (!selectedCardId) return;
+  const handleSendGift = async () => {
+    if (!selectedCardId || isProcessingTrade) return;
 
-    soundEngine.playTurnChime();
-    const result = tradeOrGiftCard(collection, selectedCardId, recipient);
+    setIsProcessingTrade(true);
+    try {
+      soundEngine.playTurnChime();
+      const result = tradeOrGiftCard(collection, selectedCardId, recipient);
 
-    if (result.success) {
-      onUpdateCollection(result.updatedSender);
-      setTradeMessage(`Successfully gifted 1x ${selectedCardDef?.name} to ${recipient}!`);
-      setSelectedCardId(null);
-    } else {
-      setTradeMessage('Could not trade. You must keep at least 1 copy of every card.');
+      if (result.success) {
+        onUpdateCollection(result.updatedSender);
+        setTradeMessage(`Successfully gifted 1x ${selectedCardDef?.name} to ${recipient}!`);
+        setSelectedCardId(null);
+      } else {
+        setTradeMessage('Could not trade. You must keep at least 1 copy of every card.');
+      }
+    } finally {
+      setTimeout(() => {
+        setIsProcessingTrade(false);
+      }, 400);
     }
   };
 
@@ -157,12 +166,12 @@ export function TradeModal({
 
             <button
               type="button"
-              disabled={!selectedCardId}
+              disabled={!selectedCardId || isProcessingTrade}
               onClick={handleSendGift}
               className="btn btn-primary py-3 text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Gift className="w-4 h-4 text-purple-300" />
-              Gift Card (Free Transfer)
+              {isProcessingTrade ? 'Finalizing Trade...' : 'Gift Card (Free Transfer)'}
             </button>
           </div>
         </div>

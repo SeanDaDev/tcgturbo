@@ -5,6 +5,32 @@ import Image from 'next/image';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 
+// Bug 25: Card Tooltip Viewport Edge Overflow Clipping Fix
+export function computeTooltipPosition(triggerRect: DOMRect, tooltipWidth = 260, tooltipHeight = 360) {
+  if (typeof window === 'undefined') return { x: '0px', y: '0px' };
+  const margin = 12;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let x = triggerRect.right + margin;
+  let y = triggerRect.top;
+
+  // Flip horizontally if extending beyond right edge
+  if (x + tooltipWidth > viewportWidth) {
+    x = triggerRect.left - tooltipWidth - margin;
+  }
+  // Ensure not clipped on left
+  x = Math.max(margin, x);
+
+  // Prevent vertical clipping
+  if (y + tooltipHeight > viewportHeight) {
+    y = viewportHeight - tooltipHeight - margin;
+  }
+  y = Math.max(margin, y);
+
+  return { x: `${x}px`, y: `${y}px` };
+}
+
 interface CardProps {
   card: CardDef | CardInstance | null;
   isFaceDown?: boolean;

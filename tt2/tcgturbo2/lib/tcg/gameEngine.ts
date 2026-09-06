@@ -181,22 +181,37 @@ export function drawCardInternal(
   const playerIndex = playerId - 1;
   const player = state.players[playerIndex];
 
-  // Fatigue
-  if (player.deck.length === 0) {
-    const nextHp = player.vanguard.hp - 2;
+  // Fatigue (Bug 4)
+  if (!player.deck || player.deck.length === 0) {
+    const fatigueCount = (player.fatigueCounter || 0) + 1;
+    const fatigueDamage = Math.max(1, fatigueCount);
+    const nextHp = Math.max(0, player.vanguard.hp - fatigueDamage);
+
     let nextState = {
       ...state,
       players: state.players.map((p, idx) =>
         idx === playerIndex
-          ? { ...p, vanguard: { ...p.vanguard, hp: Math.max(0, nextHp) } }
+          ? {
+              ...p,
+              fatigueCounter: fatigueCount,
+              vanguard: { ...p.vanguard, hp: nextHp }
+            }
           : p
       ) as [PlayerState, PlayerState]
     };
-    nextState = logMessage(nextState, `${player.name} takes 2 Fatigue damage! (Deck Empty)`, 'log-attack');
+    nextState = addFloatingText(nextState, `Fatigue -${fatigueDamage}`, 'damage', 50, 50);
+    nextState = logMessage(
+      nextState,
+      `${player.name} takes ${fatigueDamage} Fatigue damage! (Deck Empty, Fatigue #${fatigueCount})`,
+      'log-attack'
+    );
     return checkWinCondition(nextState);
   }
 
   const [drawn, ...remainingDeck] = player.deck;
+  if (!drawn) {
+    return state;
+  }
 
   // Hand limit of 8
   if (player.hand.length >= 8) {
@@ -1370,6 +1385,7 @@ function aoeDamageEnemies(state: GameState, oppIndex: number, amount: number): G
   const opponent = state.players[oppIndex];
   const nextBoard = [...opponent.board];
   const nextGrave = [...opponent.graveyard];
+  const deadUnits: CardInstance[] = [];
 
   opponent.board.forEach((unit, idx) => {
     if (!unit) return;
@@ -1380,18 +1396,31 @@ function aoeDamageEnemies(state: GameState, oppIndex: number, amount: number): G
       if (nextHp <= 0) {
         nextBoard[idx] = null;
         nextGrave.push(unit);
+        deadUnits.push(unit);
       } else {
         nextBoard[idx] = { ...unit, currentHp: nextHp };
       }
     }
   });
 
-  return {
+  let nextState: GameState = {
     ...state,
     players: state.players.map((p, idx) =>
       idx === oppIndex ? { ...p, board: nextBoard, graveyard: nextGrave } : p
     ) as [PlayerState, PlayerState]
   };
+
+  // Bug 10: Sequential FIFO deathrattle queue processing
+  const deathQueue = [...deadUnits];
+  while (deathQueue.length > 0) {
+    const currentUnit = deathQueue.shift()!;
+    if (currentUnit.keywords?.includes('Deathrattle') || currentUnit.id === 'void_stalker') {
+      nextState = logMessage(nextState, `${currentUnit.name}'s Deathrattle activated!`, 'log-attack');
+      nextState = drawCardInternal(nextState, (oppIndex + 1) as 1 | 2);
+    }
+  }
+
+  return nextState;
 }
 
 function aoeDamageAndFreezeEnemies(state: GameState, oppIndex: number, amount: number): GameState {

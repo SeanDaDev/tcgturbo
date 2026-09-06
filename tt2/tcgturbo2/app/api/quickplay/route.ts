@@ -128,6 +128,9 @@ export async function POST(req: NextRequest) {
         p2Name: room.p2Name,
         isP2AI: room.isP2AI,
         isOpponentConnected: room.player2Id !== 'waiting_opponent',
+        serverTimestamp: room.serverTimestamp,
+        turnStartTime: room.turnStartTime,
+        turnDurationMs: room.turnDurationMs,
         gameState: sanitizedState
       });
     }

@@ -41,6 +41,8 @@ export function CosmeticsShopModal({
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [checkoutSuccessMessage, setCheckoutSuccessMessage] = useState<string | null>(null);
+  // Bug 22: Purchase button mutation lock to prevent double-spend
+  const [processingItemId, setProcessingItemId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -49,15 +51,23 @@ export function CosmeticsShopModal({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleBuyItem = (item: CosmeticItem) => {
-    const res = buyCosmeticItem(collection, item.id);
-    if (res.success) {
-      soundEngine.playVictory();
-      onUpdateCollection(res.updatedCollection);
-      showToast(`🎉 ${res.message}`);
-    } else {
-      soundEngine.playTrap();
-      showToast(`⚠️ ${res.message}`);
+  const handleBuyItem = async (item: CosmeticItem) => {
+    if (processingItemId) return;
+    setProcessingItemId(item.id);
+    try {
+      const res = buyCosmeticItem(collection, item.id);
+      if (res.success) {
+        soundEngine.playVictory();
+        onUpdateCollection(res.updatedCollection);
+        showToast(`🎉 ${res.message}`);
+      } else {
+        soundEngine.playTrap();
+        showToast(`⚠️ ${res.message}`);
+      }
+    } finally {
+      setTimeout(() => {
+        setProcessingItemId(null);
+      }, 350);
     }
   };
 
@@ -255,11 +265,16 @@ export function CosmeticsShopModal({
                       ) : (
                         <button
                           type="button"
+                          disabled={processingItemId === item.id || collection.gemBalance < item.priceGems}
                           onClick={() => handleBuyItem(item)}
-                          className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-mono text-xs font-black rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-transform hover:scale-105"
+                          className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:opacity-40 disabled:hover:from-amber-500 text-slate-950 font-mono text-xs font-black rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-transform hover:scale-105"
                         >
                           <Gem className="w-3.5 h-3.5 text-slate-950" />
-                          Unlock for {item.priceGems.toLocaleString()} Gems (${item.priceUSD.toFixed(2)})
+                          {processingItemId === item.id ? (
+                            'Processing...'
+                          ) : (
+                            `Unlock for ${item.priceGems.toLocaleString()} Gems ($${item.priceUSD.toFixed(2)})`
+                          )}
                         </button>
                       )}
                     </div>

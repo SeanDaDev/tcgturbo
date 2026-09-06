@@ -136,11 +136,18 @@ class BattleUI {
       }
     });
 
-    // Cancel targeting on escape
+    // Cancel targeting on escape or right-click (Bug 5)
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         this.clearSelections();
         if (quickRulesModal) quickRulesModal.classList.remove('active');
+      }
+    });
+
+    window.addEventListener('contextmenu', (e) => {
+      if (this.selectedAttackerId || this.targetedSpellCardId) {
+        e.preventDefault();
+        this.clearSelections();
       }
     });
 

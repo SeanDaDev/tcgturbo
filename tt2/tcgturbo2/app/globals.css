@@ -697,3 +697,29 @@ body {
   animation: summonRipple 0.5s ease-out forwards;
   pointer-events: none;
 }
+
+/* ==========================================================================
+   FLOATING COMBAT TEXT & RAYCAST INTERCEPTION FIX (Bug 9)
+   ========================================================================== */
+.floating-damage-container,
+.floating-combat-container,
+.floating-combat-num,
+.combat-text-popup {
+  position: absolute;
+  pointer-events: none !important;
+  user-select: none;
+  z-index: 100;
+  animation: floatUpAndFade 1.2s ease-out forwards;
+}
+
+@keyframes floatUpAndFade {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(1.15);
+  }
+}
+

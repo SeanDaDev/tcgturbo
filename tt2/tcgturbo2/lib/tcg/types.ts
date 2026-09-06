@@ -80,6 +80,7 @@ export interface PlayerState {
   graveyard: CardInstance[];
   extraTurns: number;
   hasDrawnThisTurn?: boolean;
+  fatigueCounter?: number;
 }
 
 export interface ActionLog {

@@ -16,6 +16,9 @@ export interface QuickplayRoom {
   roomId: string;
   roomCode: string;
   createdAt: number;
+  turnStartTime: number;
+  turnDurationMs: number;
+  serverTimestamp: number;
   player1Id: string;
   player2Id: string;
   p1Name: string;
@@ -117,10 +120,14 @@ export function createCustomRoom(
   initialGame.players[1].name = 'Waiting for Duellist...';
   initialGame.players[1].isAI = false;
 
+  const now = Date.now();
   const room: QuickplayRoom = {
     roomId,
     roomCode,
-    createdAt: Date.now(),
+    createdAt: now,
+    turnStartTime: now,
+    turnDurationMs: 60000,
+    serverTimestamp: now,
     player1Id: userId,
     player2Id: 'waiting_opponent',
     p1Name,
@@ -235,10 +242,14 @@ export function getOrCreateQuickplayRoom(
   initialGame.players[1].name = resolvedP2Name;
   initialGame.players[1].isAI = forceAi;
 
+  const now = Date.now();
   const newRoom: QuickplayRoom = {
     roomId,
     roomCode,
-    createdAt: Date.now(),
+    createdAt: now,
+    turnStartTime: now,
+    turnDurationMs: 60000,
+    serverTimestamp: now,
     player1Id: playerUserId,
     player2Id: forceAi ? 'ai_opponent' : 'waiting_opponent',
     p1Name: resolvedP1Name,
@@ -256,7 +267,24 @@ export function getOrCreateQuickplayRoom(
 
 export function getQuickplayRoom(roomIdOrCode: string): QuickplayRoom | undefined {
   cleanupStaleRooms();
-  return ACTIVE_ROOMS.get(roomIdOrCode) || ACTIVE_ROOMS.get(roomIdOrCode.toUpperCase());
+  const room = ACTIVE_ROOMS.get(roomIdOrCode) || ACTIVE_ROOMS.get(roomIdOrCode.toUpperCase());
+  if (!room) return undefined;
+
+  // Bug 1: Server-authoritative turn timeout check & auto-resolution
+  const now = Date.now();
+  room.serverTimestamp = now;
+  if (!room.gameState.winner && room.turnStartTime && now - room.turnStartTime >= room.turnDurationMs) {
+    let nextState = endTurn(room.gameState);
+    if (room.isP2AI && nextState.currentTurn === 2 && !nextState.winner) {
+      nextState = runServerAiTurn(nextState);
+    }
+    room.gameState = nextState;
+    room.turnStartTime = Date.now();
+    ACTIVE_ROOMS.set(room.roomId, room);
+    ACTIVE_ROOMS.set(room.roomCode, room);
+  }
+
+  return room;
 }
 
 /**
@@ -396,10 +424,15 @@ export function executeRoomAction(
   let nextState = dispatchGameAction(room.gameState, action);
 
   // If Player 1 ended their turn and Player 2 is AI, execute AI moves automatically
-  if (action.type === 'endTurn' && room.isP2AI && nextState.currentTurn === 2 && !nextState.winner) {
-    nextState = runServerAiTurn(nextState);
+  if (action.type === 'endTurn') {
+    room.turnStartTime = Date.now();
+    if (room.isP2AI && nextState.currentTurn === 2 && !nextState.winner) {
+      nextState = runServerAiTurn(nextState);
+      room.turnStartTime = Date.now();
+    }
   }
 
+  room.serverTimestamp = Date.now();
   room.gameState = nextState;
   ACTIVE_ROOMS.set(room.roomId, room);
   ACTIVE_ROOMS.set(room.roomCode, room);

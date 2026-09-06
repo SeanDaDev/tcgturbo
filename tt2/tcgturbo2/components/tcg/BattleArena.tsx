@@ -77,10 +77,18 @@ export function BattleArena({
   const isBottomPlayerTurn = gameState.currentTurn === bottomPlayerId;
   const isTopPlayerTurn = gameState.currentTurn === topPlayerId;
 
-  // Clear selections
+  const isProcessingActionRef = useRef<boolean>(false);
+
+  // Clear selections & target canvas (Bug 5)
   const clearSelections = useCallback(() => {
     setSelectedAttackerId(null);
     setSelectedHandCardId(null);
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
   }, []);
 
   // Reset manual POV override and clear selections whenever turn changes so view naturally tracks active player
@@ -170,6 +178,30 @@ export function BattleArena({
 
   const dispatchAction = useCallback(
     (action: GameAction) => {
+      // Bug 3: Mutex lock to prevent energy underflow & concurrent action races
+      if (isProcessingActionRef.current) return;
+
+      // Energy check for card play
+      if (action.type === 'playCard') {
+        const activeP = gameState.players[gameState.currentTurn - 1];
+        const cardInHand = activeP.hand.find(c => c.instanceId === action.instanceId);
+        if (cardInHand) {
+          let reqCost = cardInHand.cost;
+          if (typeof action.targetLaneIndex === 'number') {
+            const targetUnit = activeP.board[action.targetLaneIndex];
+            if (targetUnit && canAscendOnUnit(cardInHand, targetUnit)) {
+              reqCost = calculateAscensionCost(cardInHand, targetUnit);
+            }
+          }
+          if (activeP.mana < reqCost) {
+            soundEngine.playTrap();
+            return;
+          }
+        }
+      }
+
+      isProcessingActionRef.current = true;
+
       if (action.type === 'declareAttack') {
         triggerImpactJuice('attack');
       } else if (action.type === 'playCard' && typeof action.targetLaneIndex === 'number') {
@@ -181,13 +213,19 @@ export function BattleArena({
         triggerImpactJuice('summon');
       }
 
-      if (onAction) {
-        onAction(action);
-      } else {
-        setGameState(s => dispatchGameAction(s, action));
+      try {
+        if (onAction) {
+          onAction(action);
+        } else {
+          setGameState(s => dispatchGameAction(s, action));
+        }
+      } finally {
+        setTimeout(() => {
+          isProcessingActionRef.current = false;
+        }, 120);
       }
     },
-    [onAction, setGameState, isPlayer1Turn, triggerImpactJuice]
+    [onAction, setGameState, isPlayer1Turn, triggerImpactJuice, gameState]
   );
 
   // Card click handlers

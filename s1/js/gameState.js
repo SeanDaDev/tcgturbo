@@ -179,11 +179,13 @@ class GameState {
 
   drawCard(forPlayer1, playSound = true) {
     const player = this.players[forPlayer1 ? 0 : 1];
-    if (player.deck.length === 0) {
-      // Fatigue damage
-      player.vanguard.hp -= 2;
-      this.log(`${player.name} takes 2 Fatigue damage!`, 'log-attack');
-      this.notify({ type: 'combat_hit', targetType: 'vanguard', targetId: player.id, damage: 2 });
+    if (!player.deck || player.deck.length === 0) {
+      // Fatigue damage (Bug 4)
+      player.fatigueCounter = (player.fatigueCounter || 0) + 1;
+      const fatigueDamage = player.fatigueCounter;
+      player.vanguard.hp = Math.max(0, player.vanguard.hp - fatigueDamage);
+      this.log(`${player.name} takes ${fatigueDamage} Fatigue damage! (Deck Empty, Fatigue #${player.fatigueCounter})`, 'log-attack');
+      this.notify({ type: 'combat_hit', targetType: 'vanguard', targetId: player.id, damage: fatigueDamage });
       if (player.vanguard.hp <= 0) this.checkWinCondition();
       return null;
     }

@@ -71,7 +71,7 @@ export function Header({
       </Link>
 
       {/* Nav Tabs (Scrollable on small mobile screens) */}
-      <nav className="nav-tabs flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 gap-1 overflow-x-auto max-w-full" aria-label="Main Navigation">
+      <nav className="nav-tabs flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 gap-1 overflow-x-auto max-w-full scrollbar-none scroll-smooth" aria-label="Main Navigation">
         <button
           className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
             activeTab === 'battle'

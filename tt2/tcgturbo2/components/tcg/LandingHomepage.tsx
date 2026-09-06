@@ -18,17 +18,20 @@ import {
   Hourglass,
   ShoppingBag,
   ArrowRight,
-  Star
+  Star,
+  Layers
 } from 'lucide-react';
 
-import { CardDef } from '@/lib/tcg/types';
+import { CardDef, CardInstance } from '@/lib/tcg/types';
+import { MainNavTab } from './Header';
 
 interface LandingHomepageProps {
   onOpenShopModal?: () => void;
-  onInspectCard?: (card: CardDef) => void;
+  onInspectCard?: (card: CardDef | CardInstance) => void;
+  onNavigateTab?: (tab: MainNavTab) => void;
 }
 
-export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomepageProps) {
+export function LandingHomepage({ onOpenShopModal, onInspectCard, onNavigateTab }: LandingHomepageProps) {
   const [selectedFaction, setSelectedFaction] = useState<'solar' | 'void' | 'verdant' | 'tide' | 'astral'>('solar');
 
   // Sample cards for 3D showcase
@@ -166,22 +169,151 @@ export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomep
         </div>
 
         {/* Hero Right 3D Interactive Card Tilt Showcase */}
-        <div className="flex-1 flex justify-center items-center relative w-full max-w-md h-[420px]">
-          <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/20 via-indigo-500/20 to-purple-500/20 rounded-full blur-3xl" />
+        <div className="flex-1 flex flex-col items-center justify-center relative w-full max-w-md">
+          <div className="text-[11px] font-mono font-bold text-amber-400 mb-2 flex items-center gap-1.5 animate-pulse">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Click any card to inspect 3D Holo Foil
+          </div>
+          <div className="relative w-full h-[380px] flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/20 via-indigo-500/20 to-purple-500/20 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Stack of 3D Cards */}
-          <div className="relative w-full h-full flex items-center justify-center">
-            <div className="absolute -left-4 top-8 -rotate-12 hover:rotate-0 hover:z-30 transition-all duration-300 scale-90 md:scale-100">
-              <Card card={voidCard} size="lg" />
-            </div>
-            <div className="absolute right-0 top-14 rotate-12 hover:rotate-0 hover:z-30 transition-all duration-300 scale-90 md:scale-100">
-              <Card card={chronosCard} size="lg" />
-            </div>
-            <div className="relative z-20 shadow-[0_0_50px_rgba(245,158,11,0.5)] scale-105 hover:scale-110 transition-all duration-300">
-              <Card card={ignisCard} size="lg" />
+            {/* Stack of 3D Cards */}
+            <div className="relative w-full h-full flex items-center justify-center">
+              <div 
+                className="absolute -left-4 top-6 -rotate-12 hover:rotate-0 hover:z-30 transition-all duration-300 scale-90 md:scale-100 cursor-pointer"
+                onClick={() => onInspectCard?.(voidCard)}
+              >
+                <Card card={voidCard} size="lg" onInspect={onInspectCard} />
+              </div>
+              <div 
+                className="absolute right-0 top-12 rotate-12 hover:rotate-0 hover:z-30 transition-all duration-300 scale-90 md:scale-100 cursor-pointer"
+                onClick={() => onInspectCard?.(chronosCard)}
+              >
+                <Card card={chronosCard} size="lg" onInspect={onInspectCard} />
+              </div>
+              <div 
+                className="relative z-20 shadow-[0_0_50px_rgba(245,158,11,0.5)] scale-105 hover:scale-110 transition-all duration-300 cursor-pointer"
+                onClick={() => onInspectCard?.(ignisCard)}
+              >
+                <Card card={ignisCard} size="lg" onInspect={onInspectCard} />
+              </div>
             </div>
           </div>
         </div>
+      </section>
+
+      {/* =========================================================================
+          FAST MODE SELECTOR TILES
+          ========================================================================= */}
+      <section className="mode-selector-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link
+          href="/battle/quickplay"
+          onClick={() => soundEngine.playTurnChime()}
+          className="group bg-slate-950/80 border border-amber-500/40 hover:border-amber-400 p-5 rounded-2xl flex flex-col justify-between gap-3 shadow-lg hover:shadow-[0_0_25px_rgba(245,158,11,0.25)] transition-all hover:scale-[1.02] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between">
+            <span className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-300 font-black">
+              ⚡
+            </span>
+            <span className="text-[10px] font-mono uppercase bg-amber-950/80 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+              Ranked / Casual
+            </span>
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-white text-base group-hover:text-amber-300 transition-colors">
+              Online Quickplay
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Low-latency server matches with automated anti-cheat & authoritative turn clocks.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+            <span>Play Match</span> <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </Link>
+
+        <Link
+          href="/battle/splitscreen"
+          onClick={() => soundEngine.playHover()}
+          className="group bg-slate-950/80 border border-sky-500/40 hover:border-sky-400 p-5 rounded-2xl flex flex-col justify-between gap-3 shadow-lg hover:shadow-[0_0_25px_rgba(56,189,248,0.25)] transition-all hover:scale-[1.02] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between">
+            <span className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/60 flex items-center justify-center text-sky-300 font-black">
+              👥
+            </span>
+            <span className="text-[10px] font-mono uppercase bg-sky-950/80 border border-sky-500/40 text-sky-300 px-2 py-0.5 rounded-full font-bold">
+              Local Co-Op
+            </span>
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-white text-base group-hover:text-sky-300 transition-colors">
+              Splitscreen 2P Duel
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Pass-and-play duel with smart privacy curtains to hide cards from your opponent.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-sky-400 group-hover:translate-x-1 transition-transform">
+            <span>Start Couch Duel</span> <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playHover();
+            onNavigateTab?.('deckbuilder');
+          }}
+          className="group text-left bg-slate-950/80 border border-emerald-500/40 hover:border-emerald-400 p-5 rounded-2xl flex flex-col justify-between gap-3 shadow-lg hover:shadow-[0_0_25px_rgba(16,185,129,0.25)] transition-all hover:scale-[1.02] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between">
+            <span className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/60 flex items-center justify-center text-emerald-300 font-black">
+              🗂️
+            </span>
+            <span className="text-[10px] font-mono uppercase bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+              Builder
+            </span>
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-white text-base group-hover:text-emerald-300 transition-colors">
+              Deck Builder & Presets
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Construct 20-card tactical loadouts, test mana curves, and import/export deck codes.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-400 group-hover:translate-x-1 transition-transform">
+            <span>Open Builder</span> <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playHover();
+            onNavigateTab?.('arcade');
+          }}
+          className="group text-left bg-slate-950/80 border border-rose-500/40 hover:border-rose-400 p-5 rounded-2xl flex flex-col justify-between gap-3 shadow-lg hover:shadow-[0_0_25px_rgba(244,63,94,0.25)] transition-all hover:scale-[1.02] backdrop-blur-xl"
+        >
+          <div className="flex items-center justify-between">
+            <span className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/60 flex items-center justify-center text-rose-300 font-black">
+              🎮
+            </span>
+            <span className="text-[10px] font-mono uppercase bg-rose-950/80 border border-rose-500/40 text-rose-300 px-2 py-0.5 rounded-full font-bold">
+              Arcade Hub
+            </span>
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-white text-base group-hover:text-rose-300 transition-colors">
+              Cosmic Mini-Games
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Astral Blackjack, Chrono Solitaire, and Rune Memory Match with zero downloads.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400 group-hover:translate-x-1 transition-transform">
+            <span>Play Arcade</span> <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </button>
       </section>
 
       {/* =========================================================================
@@ -198,34 +330,58 @@ export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomep
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="feature-card bg-slate-950/80 border border-amber-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-amber-400 transition-all">
+          <div 
+            onClick={() => onNavigateTab?.('lore')}
+            className="feature-card bg-slate-950/80 border border-amber-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-amber-400 transition-all cursor-pointer"
+          >
             <div className="w-12 h-12 rounded-2xl bg-amber-950/80 border border-amber-400 flex items-center justify-center text-amber-300 font-black text-xl shadow-lg">
               🐉
             </div>
-            <h3 className="font-serif font-bold text-xl text-white">In-Place Creature Ascension</h3>
+            <h3 className="font-serif font-bold text-xl text-white group-hover:text-amber-300 transition-colors">
+              In-Place Creature Ascension
+            </h3>
             <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
               Evolve Form 1 initiates into Form 3 Mythic Apex Sovereigns directly in their battlefield lane for reduced mana costs. Ascended units retain Rush and trigger devastating Ascension Burst abilities upon evolving.
             </p>
+            <div className="mt-auto text-xs font-mono text-amber-400 flex items-center gap-1">
+              <span>Read rules in Codex</span> <ArrowRight className="w-3.5 h-3.5" />
+            </div>
           </div>
 
-          <div className="feature-card bg-slate-950/80 border border-purple-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-purple-400 transition-all">
+          <div 
+            onClick={() => onNavigateTab?.('lore')}
+            className="feature-card bg-slate-950/80 border border-purple-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-purple-400 transition-all cursor-pointer"
+          >
             <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-400 flex items-center justify-center text-purple-300 font-black text-xl shadow-lg">
               🛡️
             </div>
-            <h3 className="font-serif font-bold text-xl text-white">Secret Ward Traps</h3>
+            <h3 className="font-serif font-bold text-xl text-white group-hover:text-purple-300 transition-colors">
+              Secret Ward Traps
+            </h3>
             <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
               Lay down hidden continuum traps in your secret slots that trigger on enemy attacks, direct strikes, or fatal Vanguard damage to rewrite fate and reverse momentum at crucial moments.
             </p>
+            <div className="mt-auto text-xs font-mono text-purple-400 flex items-center gap-1">
+              <span>Explore Ward mechanics</span> <ArrowRight className="w-3.5 h-3.5" />
+            </div>
           </div>
 
-          <div className="feature-card bg-slate-950/80 border border-sky-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-sky-400 transition-all">
+          <div 
+            onClick={() => onNavigateTab?.('almanac')}
+            className="feature-card bg-slate-950/80 border border-sky-500/30 rounded-2xl p-6 flex flex-col gap-3 relative overflow-hidden backdrop-blur-xl group hover:border-sky-400 transition-all cursor-pointer"
+          >
             <div className="w-12 h-12 rounded-2xl bg-sky-950/80 border border-sky-400 flex items-center justify-center text-sky-300 font-black text-xl shadow-lg">
               ✨
             </div>
-            <h3 className="font-serif font-bold text-xl text-white">3D Holographic Specular Foils</h3>
+            <h3 className="font-serif font-bold text-xl text-white group-hover:text-sky-300 transition-colors">
+              3D Holographic Specular Foils
+            </h3>
             <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
               Tilt interactive cards under your cursor to admire real-time 3D specular light reflection, rainbow diffraction shaders, and golden solar sheens.
             </p>
+            <div className="mt-auto text-xs font-mono text-sky-400 flex items-center gap-1">
+              <span>View full 3D Showcase</span> <ArrowRight className="w-3.5 h-3.5" />
+            </div>
           </div>
         </div>
       </section>
@@ -283,7 +439,7 @@ export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomep
               {activeFaction.desc}
             </p>
 
-            <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-3 pt-2">
               <Link
                 href="/battle/quickplay"
                 onClick={() => soundEngine.playTurnChime()}
@@ -291,11 +447,23 @@ export function LandingHomepage({ onOpenShopModal, onInspectCard }: LandingHomep
               >
                 Duel with {activeFaction.name} <ArrowRight className="w-4 h-4" />
               </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playHover();
+                  onNavigateTab?.('deckbuilder');
+                }}
+                className="btn bg-black/40 hover:bg-black/60 border border-white/20 text-white font-mono text-xs font-bold px-4 py-3 rounded-xl inline-flex items-center gap-2 transition-transform"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Build {activeFaction.name} Deck</span>
+              </button>
             </div>
           </div>
 
           <div className="z-10 scale-105 hover:scale-110 transition-transform cursor-pointer">
-            <Card card={activeFaction.heroCard} size="lg" onInspect={onInspectCard} />
+            <Card card={activeFaction.heroCard} size="lg" onInspect={onInspectCard} onClick={() => onInspectCard?.(activeFaction.heroCard)} />
           </div>
         </div>
       </section>

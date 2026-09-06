@@ -10,8 +10,41 @@ class SoundEngine {
     this.isMuted = false;
     this.volume = 0.4;
     this.isUnlocked = false;
+    this.activeSfxCooldowns = new Map();
 
+    this.loadAudioSettings();
     this.setupUnlockListeners();
+  }
+
+  loadAudioSettings() {
+    try {
+      const raw = localStorage.getItem('tcgturbo_audio_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.isMuted === 'boolean') this.isMuted = parsed.isMuted;
+        if (typeof parsed.masterVolume === 'number') this.volume = parsed.masterVolume;
+        else if (typeof parsed.volume === 'number') this.volume = parsed.volume;
+      }
+    } catch {}
+  }
+
+  saveAudioSettings() {
+    try {
+      localStorage.setItem('tcgturbo_audio_settings', JSON.stringify({
+        masterVolume: this.volume,
+        musicVolume: 0.6,
+        sfxVolume: this.volume,
+        isMuted: this.isMuted
+      }));
+    } catch {}
+  }
+
+  shouldThrottle(key, cooldownMs = 70) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const last = this.activeSfxCooldowns.get(key) || 0;
+    if (now - last < cooldownMs) return true;
+    this.activeSfxCooldowns.set(key, now);
+    return false;
   }
 
   setupUnlockListeners() {
@@ -58,6 +91,7 @@ class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime);
     }
+    this.saveAudioSettings();
     return !this.isMuted;
   }
 

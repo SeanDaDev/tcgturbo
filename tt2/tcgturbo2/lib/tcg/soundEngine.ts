@@ -3,19 +3,68 @@
  * Generates authentic retro-modern audio without external audio files.
  */
 
+const AUDIO_SETTINGS_STORAGE_KEY = 'tcgturbo_audio_settings';
+
+export interface AudioSettings {
+  masterVolume: number;
+  musicVolume: number;
+  sfxVolume: number;
+  isMuted: boolean;
+}
+
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   public isMuted: boolean = false;
   public volume: number = 0.4;
   private isUnlocked: boolean = false;
+  // Bug 20: SFX concurrency limiter & throttle cooldown map
+  private activeSfxCooldowns: Map<string, number> = new Map();
 
   constructor() {
     if (typeof window !== 'undefined') {
+      this.loadAudioSettings();
       this.setupUnlockListeners();
     }
   }
 
+  // Bug 21: Persist audio preferences
+  private loadAudioSettings() {
+    try {
+      const raw = localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.isMuted === 'boolean') this.isMuted = parsed.isMuted;
+        if (typeof parsed.masterVolume === 'number') this.volume = parsed.masterVolume;
+        else if (typeof parsed.volume === 'number') this.volume = parsed.volume;
+      }
+    } catch {}
+  }
+
+  public saveAudioSettings() {
+    try {
+      const settings: AudioSettings = {
+        masterVolume: this.volume,
+        musicVolume: 0.6,
+        sfxVolume: this.volume,
+        isMuted: this.isMuted
+      };
+      localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch {}
+  }
+
+  // Bug 20: Throttle method to avoid audio crackle and clipping
+  public shouldThrottle(soundKey: string, cooldownMs: number = 70): boolean {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const lastPlayed = this.activeSfxCooldowns.get(soundKey) || 0;
+    if (now - lastPlayed < cooldownMs) {
+      return true;
+    }
+    this.activeSfxCooldowns.set(soundKey, now);
+    return false;
+  }
+
+  // Bug 19: Global user gesture attachment
   private setupUnlockListeners() {
     const unlock = () => {
       this.unlock();
@@ -60,6 +109,7 @@ class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime);
     }
+    this.saveAudioSettings();
     return !this.isMuted;
   }
 
@@ -68,10 +118,12 @@ class SoundEngine {
     if (this.masterGain && this.ctx && !this.isMuted) {
       this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
     }
+    this.saveAudioSettings();
   }
 
   // Soft hover tick
   public playHover() {
+    if (this.shouldThrottle('hover', 40)) return;
     this.init();
     this.resume();
     if (!this.ctx || !this.masterGain || this.isMuted) return;
@@ -98,6 +150,7 @@ class SoundEngine {
 
   // Card draw swoosh
   public playCardDraw() {
+    if (this.shouldThrottle('card_draw', 60)) return;
     this.init();
     this.resume();
     if (!this.ctx || !this.masterGain || this.isMuted) return;

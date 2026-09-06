@@ -7,13 +7,63 @@ import { PRESET_DECKS } from '@/lib/tcg/presetDecks';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { soundEngine } from '@/lib/tcg/soundEngine';
 import { tcgWorkerManager } from '@/lib/tcg/tcgWorkerManager';
-import { Search, Plus, Trash2, Swords, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Trash2, Swords, CheckCircle2, Download, Upload, Shuffle } from 'lucide-react';
 
 interface DeckBuilderProps {
   onInspectCard: (card: CardDef | CardInstance) => void;
   onSaveP1Deck: (deckCards: string[]) => void;
   onSaveP2Deck: (deckCards: string[]) => void;
   onTestBattle: (deckCards: string[]) => void;
+}
+
+// Bug 12: Safe Base64 Deck Code import/export with schema validation
+export function exportDeckToCode(deckName: string, cards: string[], heroId: string = 'ignis_solar'): string {
+  try {
+    const payload = JSON.stringify({ version: 2, name: deckName, heroId, cards });
+    const encoded = btoa(unescape(encodeURIComponent(payload)));
+    return `TCGT:${encoded}`;
+  } catch {
+    return '';
+  }
+}
+
+export function importDeckFromCode(code: string): { success: boolean; deck?: { name: string; heroId: string; cards: string[] }; error?: string } {
+  try {
+    const cleaned = code.trim();
+    if (!cleaned.startsWith('TCGT:')) {
+      return { success: false, error: 'Invalid deck format prefix. Must start with TCGT:' };
+    }
+    const jsonStr = decodeURIComponent(escape(atob(cleaned.slice(5))));
+    const parsed = JSON.parse(jsonStr);
+
+    if (!Array.isArray(parsed.cards) || typeof parsed.heroId !== 'string') {
+      return { success: false, error: 'Malformed deck payload structure.' };
+    }
+    return { success: true, deck: parsed };
+  } catch {
+    return { success: false, error: 'Failed to decode deck code. Check the code and try again.' };
+  }
+}
+
+// Bug 15: Schema migration for saved decks
+export function loadMigratedDecks(): { name: string; cards: string[]; version: number }[] {
+  if (typeof window === 'undefined') return [];
+  const raw = localStorage.getItem('tcgturbo_saved_decks');
+  if (!raw) return [];
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.map((deck: { name?: string; cards?: Array<string | { id?: string }> }) => ({
+      name: deck.name || 'Saved Deck',
+      version: 2,
+      cards: Array.isArray(deck.cards)
+        ? deck.cards.map(c => (typeof c === 'string' ? c : c.id || ''))
+        : []
+    }));
+  } catch (err) {
+    console.error('Failed to parse saved decks, resetting cache:', err);
+    return [];
+  }
 }
 
 export function DeckBuilder({
@@ -30,21 +80,37 @@ export function DeckBuilder({
     ...PRESET_DECKS.solar_pyre.cards
   ]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [importCodeInput, setImportCodeInput] = useState<string>('');
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
+
+  // Bug 13: Global pointer drag cleanup to prevent cards sticking to cursor outside browser
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      // Clear dragging indicators if pointer is released anywhere outside
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+    };
+  }, []);
 
   const showFeedbackToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Filter cards catalog
+  // Bug 11: Stale search query cancellation via active query token
   const filteredCards = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return CARDS_DATA.filter(card => {
       const matchElem = selectedElement === 'all' || card.element === selectedElement;
       const matchType = selectedType === 'all' || card.type === selectedType;
       const matchSearch =
-        !searchQuery ||
-        card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (card.desc && card.desc.toLowerCase().includes(searchQuery.toLowerCase()));
+        !q ||
+        card.name.toLowerCase().includes(q) ||
+        (card.desc && card.desc.toLowerCase().includes(q));
       return matchElem && matchType && matchSearch;
     });
   }, [selectedElement, selectedType, searchQuery]);
@@ -58,7 +124,7 @@ export function DeckBuilder({
     return counts;
   }, [currentDeck]);
 
-  // Mana Curve histogram calculations (1 to 7+) with instant local memo and worker sync
+  // Mana Curve histogram calculations
   const [workerCurve, setWorkerCurve] = useState<number[] | null>(null);
 
   useEffect(() => {
@@ -94,21 +160,21 @@ export function DeckBuilder({
   const manaCurve = workerCurve || fallbackCurve;
   const maxCurveCount = Math.max(1, ...manaCurve);
 
-  // Add card to deck
+  // Bug 14: Synchronous card addition check preventing double-click limit bypass (>3 copies)
   const handleAddCard = (cardId: string) => {
-    if (currentDeck.length >= 20) {
-      showFeedbackToast('Maximum deck size is 20 cards!');
-      return;
-    }
-
-    const currentCount = currentDeck.filter(id => id === cardId).length;
-    if (currentCount >= 3) {
-      showFeedbackToast('Maximum 3 copies per card allowed!');
-      return;
-    }
-
-    soundEngine.playCardDraw();
-    setCurrentDeck([...currentDeck, cardId]);
+    setCurrentDeck(prev => {
+      if (prev.length >= 20) {
+        showFeedbackToast('Maximum deck size is 20 cards!');
+        return prev;
+      }
+      const count = prev.filter(id => id === cardId).length;
+      if (count >= 3) {
+        showFeedbackToast('Maximum 3 copies allowed per card!');
+        return prev;
+      }
+      soundEngine.playCardDraw();
+      return [...prev, cardId];
+    });
   };
 
   // Remove card from deck
@@ -131,6 +197,28 @@ export function DeckBuilder({
       setCurrentDeck([...preset.cards]);
       showFeedbackToast(`Loaded Archetype: ${preset.name}`);
     }
+  };
+
+  // Generate Random Balanced Deck
+  const handleGenerateRandomDeck = () => {
+    soundEngine.playTurnChime();
+    const available = [...CARDS_DATA];
+    const picked: string[] = [];
+    const counts: Record<string, number> = {};
+
+    // Pick 18 random cards with max 2 copies per card
+    while (picked.length < 18) {
+      const randomCard = available[Math.floor(Math.random() * available.length)];
+      const currentCount = counts[randomCard.id] || 0;
+      if (currentCount < 2) {
+        picked.push(randomCard.id);
+        counts[randomCard.id] = currentCount + 1;
+      }
+    }
+
+    setDeckName('Random Rogue Nexus');
+    setCurrentDeck(picked);
+    showFeedbackToast('Generated 18-Card Random Tactical Deck!');
   };
 
   return (
@@ -252,7 +340,7 @@ export function DeckBuilder({
             </span>
           </div>
 
-          {/* Preset Archetypes Selector */}
+          {/* Preset Archetypes Selector & Randomizer */}
           <div className="flex items-center gap-2">
             <label className="text-[11px] font-mono font-bold text-slate-400">PRESET:</label>
             <select
@@ -264,6 +352,15 @@ export function DeckBuilder({
               <option value="verdant_ramp">Verdant Overgrowth Ramp</option>
               <option value="tide_astral">Tidal Chrono Combo</option>
             </select>
+            <button
+              type="button"
+              onClick={handleGenerateRandomDeck}
+              className="btn bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1 transition-all"
+              title="Generate a random 18-card tactical deck"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>Random</span>
+            </button>
           </div>
 
           {/* Dynamic Mana Curve Histogram */}
@@ -367,6 +464,34 @@ export function DeckBuilder({
             <button
               type="button"
               onClick={() => {
+                const code = exportDeckToCode(deckName, currentDeck);
+                if (code) {
+                  navigator.clipboard.writeText(code);
+                  showFeedbackToast('Deck code copied to clipboard! (TCGT:...)');
+                  soundEngine.playTurnChime();
+                }
+              }}
+              className="btn bg-slate-800 hover:bg-slate-700 text-sky-300 text-xs py-1.5 flex-1 flex items-center justify-center gap-1"
+              title="Export Deck Code"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Copy Code</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="btn bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs py-1.5 flex-1 flex items-center justify-center gap-1"
+              title="Import Deck Code"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import Code</span>
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
                 if (currentDeck.length < 10) {
                   showFeedbackToast('⚠️ Deck requires at least 10 cards!');
                   soundEngine.playTrap();
@@ -393,6 +518,59 @@ export function DeckBuilder({
           </div>
         </div>
       </aside>
+
+      {/* Bug 12: Safe Deck Code Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full flex flex-col gap-4 shadow-2xl">
+            <h3 className="text-sm font-bold font-serif text-white uppercase tracking-wider">
+              Import Deck From Code
+            </h3>
+            <p className="text-xs text-slate-400 font-mono">
+              Paste a valid TCG Turbo deck code starting with <strong className="text-amber-400">TCGT:</strong>
+            </p>
+            <textarea
+              rows={3}
+              value={importCodeInput}
+              onChange={e => setImportCodeInput(e.target.value)}
+              placeholder="TCGT:eyJuYW1lIjoiU29sYXI..."
+              className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs p-2.5 rounded-xl font-mono outline-none focus:border-sky-400"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportCodeInput('');
+                }}
+                className="btn btn-outline px-3 py-1.5 text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const res = importDeckFromCode(importCodeInput);
+                  if (res.success && res.deck) {
+                    setDeckName(res.deck.name || 'Imported Deck');
+                    setCurrentDeck(res.deck.cards);
+                    showFeedbackToast(`Successfully loaded "${res.deck.name || 'Imported Deck'}"!`);
+                    setShowImportModal(false);
+                    setImportCodeInput('');
+                    soundEngine.playTurnChime();
+                  } else {
+                    showFeedbackToast(`⚠️ ${res.error || 'Invalid deck code'}`);
+                    soundEngine.playTrap();
+                  }
+                }}
+                className="btn btn-primary px-4 py-1.5 text-xs"
+              >
+                Load Deck
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

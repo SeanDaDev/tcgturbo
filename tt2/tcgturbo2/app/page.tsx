@@ -10,6 +10,7 @@ import { ArcadeHub } from '@/components/arcade/ArcadeHub';
 import { CardOutfitterStudio } from '@/components/tcg/CardOutfitterStudio';
 import { CardInspectorModal } from '@/components/tcg/CardInspectorModal';
 import { AmbientBackground } from '@/components/tcg/AmbientBackground';
+import { Footer } from '@/components/tcg/Footer';
 import { GAME_TITLES } from '@/lib/tcg/titlesData';
 import { CardDef, CardInstance } from '@/lib/tcg/types';
 import { MainNavTab } from '@/components/tcg/Header';
@@ -72,6 +73,7 @@ export default function Home() {
           <LandingHomepage
             onOpenShopModal={() => setIsShopModalOpen(true)}
             onInspectCard={card => setInspectedCard(card)}
+            onNavigateTab={tab => setActiveTab(tab)}
           />
         )}
 
@@ -115,6 +117,13 @@ export default function Home() {
           />
         )}
       </main>
+
+      {/* Modern Cyber-Cosmic Footer */}
+      <Footer
+        onNavigateTab={tab => setActiveTab(tab)}
+        onOpenShopModal={() => setIsShopModalOpen(true)}
+        onOpenTradeModal={() => setIsTradeModalOpen(true)}
+      />
 
       {/* Card Inspector Modal */}
       <CardInspectorModal

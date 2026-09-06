@@ -239,7 +239,11 @@ export default function QuickplayPage() {
     prevTurnRef.current = gameState.currentTurn;
   }, [gameState, playerNumber]);
 
-  // Polling Server State Loop (1000ms) with anti-cheat protection
+  // Turn Timer Client-Server Desync Fix (Bug 1): Server timestamp delta & auto-end
+  const serverTimeOffsetRef = useRef<number>(0);
+  const turnEndTimeRef = useRef<number>(0);
+
+  // Polling Server State Loop (1000ms) with anti-cheat protection & Bug 1 timestamp sync
   useEffect(() => {
     if (!roomId || roomView === 'lobby') return;
 
@@ -259,6 +263,12 @@ export default function QuickplayPage() {
         if (data.success && data.gameState) {
           setGameState(data.gameState);
 
+          // Bug 1: Calculate clock offset & server-authoritative turn end timestamp
+          if (data.serverTimestamp && data.turnStartTime) {
+            serverTimeOffsetRef.current = Date.now() - data.serverTimestamp;
+            turnEndTimeRef.current = data.turnStartTime + (data.turnDurationMs || 60000) + serverTimeOffsetRef.current;
+          }
+
           // If host was waiting and opponent has connected, move into game
           if (roomView === 'waiting_host' && data.isOpponentConnected) {
             setRoomView('in_game');
@@ -273,16 +283,23 @@ export default function QuickplayPage() {
     return () => clearInterval(interval);
   }, [roomId, playerNumber, roomView]);
 
-  // REAL ACTION DISPATCHER: Optimistic local update + authoritative server dispatch
+  // REAL ACTION DISPATCHER: Optimistic local update + authoritative server dispatch with Bug 6 timeout rollback
   const handleDispatchAction = async (action: GameAction) => {
     if (!roomId || !gameState) return;
+
+    // Snapshot previous state for rollback on timeout or network error (Bug 6)
+    const previousState = gameState;
 
     // 1. Optimistic local state update
     setGameState(current => (current ? dispatchGameAction(current, action) : current));
 
-    // 2. Dispatch to server
+    // 2. Dispatch to server with 2500ms timeout race (Bug 6)
+    const timeoutPromise = new Promise<{ success: false; timeout: true }>((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), 2500)
+    );
+
     try {
-      const res = await fetch('/api/quickplay', {
+      const fetchPromise = fetch('/api/quickplay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -291,14 +308,24 @@ export default function QuickplayPage() {
           playerNumber,
           gameAction: action
         })
-      });
+      }).then(r => r.json());
 
-      const data = await res.json();
+      const data = (await Promise.race([fetchPromise, timeoutPromise])) as {
+        success?: boolean;
+        gameState?: GameState;
+      };
       if (data.success && data.gameState) {
         setGameState(data.gameState);
+      } else {
+        // Rollback optimistic state
+        setGameState(previousState);
+        soundEngine.playTrap();
       }
     } catch (err) {
-      console.error('Dispatch action error:', err);
+      console.error('Dispatch action error / timeout:', err);
+      // Rollback optimistic state on dropped packet or error
+      setGameState(previousState);
+      soundEngine.playTrap();
     }
   };
 

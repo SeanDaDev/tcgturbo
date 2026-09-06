@@ -17,7 +17,21 @@ export function CardInspectorModal({ card, onClose }: CardInspectorModalProps) {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    // Bug 16 & 17: WebGL context and resource disposal on unmount
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      const canvases = document.querySelectorAll('.card-inspector-modal canvas');
+      canvases.forEach(el => {
+        if (el instanceof HTMLCanvasElement) {
+          const gl = el.getContext('webgl') || el.getContext('webgl2');
+          if (gl && 'getExtension' in gl) {
+            const loseContext = (gl as WebGLRenderingContext).getExtension('WEBGL_lose_context');
+            if (loseContext) loseContext.loseContext();
+          }
+        }
+      });
+    };
   }, [onClose]);
 
   if (!card) return null;

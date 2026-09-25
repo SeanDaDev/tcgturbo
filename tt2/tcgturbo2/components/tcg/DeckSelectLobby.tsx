@@ -177,6 +177,16 @@ export function DeckSelectLobby({
               </button>
             </div>
           )}
+
+          {/* Quick Launch CTA in Header */}
+          <button
+            type="button"
+            onClick={handleLaunch}
+            className="btn bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-mono text-xs md:text-sm font-black px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.5)] transition-all hover:scale-105"
+          >
+            <Swords className="w-4 h-4 text-slate-950" />
+            <span>START DUEL</span>
+          </button>
         </div>
       </div>
 

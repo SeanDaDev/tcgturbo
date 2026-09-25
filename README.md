@@ -1,4 +1,4 @@
-# ⚔️ TCG Turbo
+# ⚔️ TCG Turbo!
 
 <p align="center">
   <img src="tt2/tcgturbo2/public/opengraph-image.png" alt="TCG Turbo Banner" width="100%" style="border-radius: 10px;" />

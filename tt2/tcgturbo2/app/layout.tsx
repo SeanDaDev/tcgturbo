@@ -3,6 +3,7 @@ import { ThemeProvider } from 'next-themes';
 import './globals.css';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
   title: 'TCG Turbo | Next-Gen Tactical Ascension Web TCG',
   description:
     'Next-Generation Hybrid Trading Card Game featuring 3D holographic foils, local couch co-op with privacy shield, tactical in-place ascension mechanics, and smart AI duelists.',

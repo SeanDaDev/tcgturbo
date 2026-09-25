@@ -72,20 +72,42 @@ export function Header({
 
       {/* Nav Tabs (Scrollable on small mobile screens) */}
       <nav className="nav-tabs flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 gap-1 overflow-x-auto max-w-full scrollbar-none scroll-smooth" aria-label="Main Navigation">
-        <button
-          className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
-            activeTab === 'battle'
-              ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
-              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-          }`}
-          onClick={() => {
-            setActiveTab('battle');
-            soundEngine.playHover();
-          }}
-        >
-          <Swords className="w-3.5 h-3.5 text-amber-400" />
-          <span>Battle Arena</span>
-        </button>
+        <div className="relative group">
+          <button
+            className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+              activeTab === 'battle'
+                ? 'bg-gradient-to-r from-blue-600/50 to-indigo-600/50 text-sky-200 border border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+            onClick={() => {
+              setActiveTab('battle');
+              soundEngine.playHover();
+            }}
+          >
+            <Swords className="w-3.5 h-3.5 text-amber-400" />
+            <span>Battle Arena</span>
+          </button>
+
+          {/* Quick Arena Launch Menu Dropdown on Hover/Focus */}
+          <div className="absolute top-full left-0 mt-1 w-56 bg-slate-950/95 border border-slate-700/80 rounded-xl p-2 shadow-2xl backdrop-blur-xl opacity-0 translate-y-1 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-200 z-50 flex flex-col gap-1">
+            <Link
+              href="/battle/splitscreen"
+              onClick={() => soundEngine.playTurnChime()}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono font-bold text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 transition-colors"
+            >
+              <Swords className="w-4 h-4 text-amber-400" />
+              <span>Enter Arena Duel</span>
+            </Link>
+            <Link
+              href="/battle/quickplay"
+              onClick={() => soundEngine.playTurnChime()}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-mono font-bold text-sky-300 hover:bg-sky-500/20 hover:text-sky-200 transition-colors"
+            >
+              <span>⚡</span>
+              <span>Quickplay Matchmaking</span>
+            </Link>
+          </div>
+        </div>
 
         <button
           className={`nav-tab-btn px-2.5 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${

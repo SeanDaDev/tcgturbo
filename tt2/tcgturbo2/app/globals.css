@@ -61,6 +61,15 @@ body {
   user-select: none;
 }
 
+/* Utilities */
+.scrollbar-none {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
 /* ==========================================================================
    3D HOLOGRAPHIC CARD SYSTEM & SHADERS
    ========================================================================== */
@@ -208,7 +217,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100px;
+  flex: 1;
+  min-width: 0;
+  max-width: calc(var(--card-width, 155px) - 44px);
   letter-spacing: 0.4px;
 }
 

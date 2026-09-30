@@ -166,7 +166,7 @@ export function Header({
           }}
         >
           <Gamepad2 className="w-3.5 h-3.5 text-rose-400" />
-          <span>🎮 Arcade Hub</span>
+          <span>Arcade Hub</span>
         </button>
 
         <button
@@ -181,21 +181,21 @@ export function Header({
           }}
         >
           <Wand2 className="w-3.5 h-3.5 text-amber-400" />
-          <span>🛠️ Outfitter</span>
+          <span>Outfitter</span>
         </button>
       </nav>
 
       {/* Action Utilities & Progression Features */}
-      <div className="header-actions flex items-center gap-2 md:gap-3">
+      <div className="header-actions flex items-center flex-wrap gap-1.5 sm:gap-2 md:gap-3">
         {onOpenProfileModal && (
           <button
             type="button"
             onClick={onOpenProfileModal}
-            className={`btn bg-slate-950 border ${supporterTier.borderColor} ${supporterTier.color} px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-md hover:scale-105 transition-transform`}
+            className={`btn bg-slate-950 border ${supporterTier.borderColor} ${supporterTier.color} px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1 sm:gap-1.5 shadow-md hover:scale-105 transition-transform`}
             title={`View Player Profile & Supporter Status (${supporterTier.name} - $${totalSpentUSD.toFixed(2)} contributed)`}
           >
             <User className="w-3.5 h-3.5" />
-            <span>Profile</span>
+            <span className="hidden xs:inline">Profile</span>
             <span className="bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded-md font-extrabold text-[10px]">
               {supporterTier.badge.split(' ')[0]} ${totalSpentUSD.toFixed(2)}
             </span>
@@ -206,12 +206,12 @@ export function Header({
           <button
             type="button"
             onClick={onOpenShopModal}
-            className="btn bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 shadow-lg hover:scale-105 transition-transform"
+            className="btn bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1 sm:gap-1.5 shadow-lg hover:scale-105 transition-transform"
             title="Open Cosmetic Store & Gem Vault ($100.00 Credit Pre-loaded)"
           >
             <span>🛍️ Shop</span>
             <span className="bg-slate-950 text-amber-300 px-1.5 py-0.5 rounded-md font-extrabold text-[10px]">
-              💎 {gemBalance.toLocaleString()} (${(gemBalance / 100).toFixed(0)})
+              💎 {gemBalance.toLocaleString()}
             </span>
           </button>
         )}
@@ -220,11 +220,11 @@ export function Header({
           <button
             type="button"
             onClick={onOpenPackModal}
-            className="btn bg-slate-900 border border-amber-500/60 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 hover:bg-slate-800 transition-colors"
+            className="btn bg-slate-900 border border-amber-500/60 text-amber-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black font-mono flex items-center gap-1.5 hover:bg-slate-800 transition-colors"
             title="Open Booster Packs"
           >
             <span>🎁 Packs</span>
-            <span className="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-md font-extrabold text-[10px]">
+            <span className="bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-md font-extrabold text-[10px]">
               {unopenedPacks}
             </span>
           </button>

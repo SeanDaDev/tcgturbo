@@ -81,19 +81,29 @@ export function savePlayerCollection(collection: PlayerCollection): void {
     console.error('Failed to save collection to localStorage', e);
   }
 
-  // Async sync with Supabase if configured
+  // Async sync with Supabase if configured (graceful fallback if offline)
   if (isSupabaseConfigured && supabase) {
-    supabase
-      .from('user_collections')
-      .upsert({
-        user_id: collection.userId,
-        owned_cards: collection.ownedCards,
-        unopened_packs: collection.unopenedPacks,
-        updated_at: new Date().toISOString()
-      })
-      .then(({ error }) => {
-        if (error) console.error('Supabase collection sync error:', error);
-      });
+    try {
+      supabase
+        .from('user_collections')
+        .upsert({
+          user_id: collection.userId,
+          owned_cards: collection.ownedCards,
+          unopened_packs: collection.unopenedPacks,
+          updated_at: new Date().toISOString()
+        })
+        .then(({ error }) => {
+          if (error) {
+            // Log as debug warn only so console and dev overlay aren't interrupted
+            console.warn('Supabase collection sync unavailable (working in local offline mode):', error.message || error);
+          }
+        })
+        .catch(err => {
+          console.warn('Supabase network unreachable, running locally:', err?.message || err);
+        });
+    } catch {
+      // Offline fallback
+    }
   }
 }
 
